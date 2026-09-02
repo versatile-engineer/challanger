@@ -108,6 +108,7 @@ async fn update(
             priority    = COALESCE($10, priority),
             recurrence  = CASE WHEN $11 THEN $12 ELSE recurrence END,
             reminder_at = CASE WHEN $13 THEN $14 ELSE reminder_at END,
+            eisenhower  = CASE WHEN $16 THEN $17 ELSE eisenhower END,
             position    = COALESCE($15, position),
             updated_at  = now()
          WHERE id = $1 AND user_id = $2
@@ -128,6 +129,8 @@ async fn update(
     .bind(body.reminder_at.is_some())
     .bind(body.reminder_at.flatten())
     .bind(body.position)
+    .bind(body.eisenhower.is_some())
+    .bind(body.eisenhower.flatten())
     .fetch_optional(&st.db)
     .await?
     .ok_or(AppError::NotFound)?;

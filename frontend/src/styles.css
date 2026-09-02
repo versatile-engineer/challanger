@@ -338,3 +338,207 @@ body {
   color: var(--accent); cursor: pointer; font: inherit; font-weight: 600;
   padding: 0;
 }
+
+/* ========== Umumiy sahifa ========== */
+.page {
+  overflow-y: auto;
+  padding: 20px 24px 40px;
+  height: 100vh;
+}
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+}
+.page-head h2 { margin: 0; font-size: 20px; }
+.page-hint { color: var(--muted); font-size: 13px; }
+
+/* ========== Kalendar ========== */
+.cal-nav { display: flex; gap: 6px; }
+.cal-nav button {
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; font: inherit;
+}
+.cal-nav button:hover { border-color: var(--accent); }
+.cal-weekdays, .cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+}
+.cal-weekday { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0; }
+.cal-grid { grid-auto-rows: minmax(96px, 1fr); }
+.cal-cell {
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+  padding: 4px; overflow: hidden; display: flex; flex-direction: column; gap: 3px;
+}
+.cal-cell.empty { background: transparent; border: none; }
+.cal-cell.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-daynum { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.cal-add {
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 15px; line-height: 1; opacity: 0; padding: 0 2px;
+}
+.cal-cell:hover .cal-add { opacity: 1; }
+.cal-tasks { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.cal-task {
+  display: flex; align-items: center; gap: 4px; text-align: left;
+  border: none; background: var(--bg); color: var(--text); font: inherit; font-size: 11px;
+  padding: 2px 5px; border-radius: 5px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-task.done { opacity: 0.5; text-decoration: line-through; }
+.cal-task .pd { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ========== Eisenhower ========== */
+.matrix {
+  display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(220px, 1fr);
+  gap: 12px; height: calc(100vh - 100px);
+}
+.quadrant {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; background: var(--panel);
+  border-top-width: 3px;
+}
+.quadrant.q1 { border-top-color: #ef4444; }
+.quadrant.q2 { border-top-color: #3b82f6; }
+.quadrant.q3 { border-top-color: #f59e0b; }
+.quadrant.q4 { border-top-color: #94a3b8; }
+.quadrant.over { background: var(--accent-soft); }
+.quadrant-head { margin-bottom: 8px; }
+.quadrant-head strong { display: block; font-size: 15px; }
+.quadrant-head span { font-size: 12px; color: var(--muted); }
+.quadrant-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; }
+.matrix-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; cursor: grab; font-size: 13px;
+}
+.matrix-card:active { cursor: grabbing; }
+.quadrant-empty { color: var(--muted); text-align: center; padding: 20px; font-size: 20px; }
+
+/* ========== Odatlar ========== */
+.habit-add, .cd-add { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.habit-add input, .cd-add input {
+  flex: 1; min-width: 160px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit;
+}
+.habit-add button, .cd-add button {
+  border: none; background: var(--accent); color: white; border-radius: 8px;
+  padding: 0 18px; cursor: pointer; font: inherit; font-weight: 600;
+}
+/* Odat yaratish formasi */
+.habit-form {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+  padding: 12px; margin-bottom: 16px;
+}
+.habit-form-top { display: flex; gap: 8px; }
+.habit-form-top input {
+  flex: 1; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--text); font: inherit;
+}
+.habit-form-top button {
+  border: none; background: var(--accent); color: white; border-radius: 8px;
+  padding: 0 18px; cursor: pointer; font: inherit; font-weight: 600;
+}
+.habit-form-opts {
+  display: flex; gap: 24px; margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border); flex-wrap: wrap;
+}
+.opt { display: flex; flex-direction: column; gap: 8px; }
+.opt > label { font-size: 12px; color: var(--muted); }
+.seg { display: flex; gap: 4px; background: var(--bg); padding: 3px; border-radius: 8px; width: fit-content; }
+.seg button {
+  border: none; background: transparent; color: var(--text); cursor: pointer;
+  padding: 6px 12px; border-radius: 6px; font: inherit; font-size: 13px;
+}
+.seg button.active { background: var(--accent); color: white; }
+.times { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.times input {
+  width: 64px; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--text); font: inherit;
+}
+.times span { font-size: 13px; color: var(--muted); }
+.opt input[type="date"] {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: inherit; width: fit-content;
+}
+.preset { display: flex; gap: 4px; }
+.preset button {
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 12px;
+}
+.preset button:hover { border-color: var(--accent); color: var(--accent); }
+
+.habit-list { display: flex; flex-direction: column; gap: 10px; }
+.habit-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 12px 14px; }
+.habit-info { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.habit-dot { width: 12px; height: 12px; border-radius: 50%; }
+.habit-name { flex: 1; font-weight: 600; }
+.habit-freq { font-size: 12px; color: var(--muted); background: var(--bg); padding: 2px 8px; border-radius: 20px; }
+.habit-streak { font-size: 13px; }
+
+/* Davomiylik progressi */
+.habit-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.habit-bar { flex: 1; height: 6px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.habit-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.habit-prog-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.habit-week { font-size: 12px; color: var(--muted); background: var(--bg); padding: 2px 8px; border-radius: 20px; }
+.habit-del { border: none; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; }
+.habit-del:hover { color: var(--danger); }
+.habit-strip { display: flex; gap: 5px; flex-wrap: wrap; }
+.habit-day {
+  width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+}
+.habit-day.done { color: white; font-weight: 600; }
+.habit-day.today { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ========== Pomodoro ========== */
+.pomo-card {
+  max-width: 420px; margin: 20px auto; text-align: center;
+  border: 1px solid var(--border); border-radius: 16px; padding: 24px; background: var(--panel);
+}
+.pomo-tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 24px; }
+.pomo-tabs button {
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  border-radius: 20px; padding: 6px 14px; cursor: pointer; font: inherit; font-size: 13px;
+}
+.pomo-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.pomo-ring {
+  --p: 0;
+  width: 220px; height: 220px; margin: 0 auto 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: conic-gradient(var(--accent) calc(var(--p) * 360deg), var(--border) 0);
+}
+.mode-short .pomo-ring, .mode-long .pomo-ring {
+  background: conic-gradient(#10b981 calc(var(--p) * 360deg), var(--border) 0);
+}
+.pomo-time {
+  width: 188px; height: 188px; border-radius: 50%; background: var(--panel);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 46px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.pomo-controls { display: flex; gap: 10px; justify-content: center; }
+.pomo-main {
+  border: none; background: var(--accent); color: white; border-radius: 10px;
+  padding: 12px 28px; cursor: pointer; font: inherit; font-weight: 600; font-size: 15px;
+}
+.pomo-reset {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  border-radius: 10px; padding: 12px 20px; cursor: pointer; font: inherit;
+}
+
+/* ========== Countdown ========== */
+.cd-list { display: flex; flex-direction: column; gap: 10px; }
+.cd-card {
+  display: flex; align-items: center; gap: 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 14px 16px;
+}
+.cd-card.past { opacity: 0.6; }
+.cd-info { flex: 1; min-width: 0; }
+.cd-title { font-weight: 600; }
+.cd-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cd-time { display: flex; align-items: center; gap: 10px; }
+.cd-past-label { font-size: 12px; color: var(--danger); }
+.cd-units { display: flex; gap: 10px; }
+.cd-units span { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.cd-units b { font-size: 20px; color: var(--text); font-variant-numeric: tabular-nums; }
+.cd-del { border: none; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; }
+.cd-del:hover { color: var(--danger); }

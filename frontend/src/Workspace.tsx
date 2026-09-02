@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { Project, Task, User } from "./types";
+import type { Habit, Project, Task, User } from "./types";
 import { Sidebar, type Selection } from "./components/Sidebar";
 import { TaskItem } from "./components/TaskItem";
 import { TaskDetail } from "./components/TaskDetail";
+import { CalendarPage } from "./components/CalendarPage";
+import { EisenhowerPage } from "./components/EisenhowerPage";
+import { HabitsPage } from "./components/HabitsPage";
+import { PomodoroPage } from "./components/PomodoroPage";
+import { CountdownPage } from "./components/CountdownPage";
 
 interface Props {
   user: User;
@@ -13,6 +18,7 @@ interface Props {
 export default function Workspace({ user, onLogout }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
   const [selection, setSelection] = useState<Selection>({ kind: "smart", view: "today" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -21,10 +27,11 @@ export default function Workspace({ user, onLogout }: Props) {
 
   // Dastlabki yuklash
   useEffect(() => {
-    Promise.all([api.listProjects(), api.listTasks()])
-      .then(([p, t]) => {
+    Promise.all([api.listProjects(), api.listTasks(), api.listHabits()])
+      .then(([p, t, h]) => {
         setProjects(p);
         setTasks(t);
+        setHabits(h);
       })
       .catch((e) => setError(String(e.message ?? e)));
   }, []);
@@ -68,11 +75,11 @@ export default function Workspace({ user, onLogout }: Props) {
 
     if (selection.kind === "project") {
       list = list.filter((t) => t.project_id === selection.id);
-    } else if (selection.view === "today") {
+    } else if (selection.kind === "smart" && selection.view === "today") {
       list = list.filter(
         (t) => t.due_date && new Date(t.due_date) < endOfToday && !t.completed
       );
-    } else if (selection.view === "upcoming") {
+    } else if (selection.kind === "smart" && selection.view === "upcoming") {
       list = list.filter(
         (t) => t.due_date && new Date(t.due_date) >= endOfToday && !t.completed
       );
@@ -180,14 +187,90 @@ export default function Workspace({ user, onLogout }: Props) {
     }
   };
 
+  // --- Odat handlerlari ---
+  const addHabit = async (data: Parameters<typeof api.createHabit>[0]) => {
+    try {
+      const h = await api.createHabit(data);
+      setHabits((prev) => [...prev, h]);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const toggleHabit = async (id: string, day: string) => {
+    // Optimistik yangilash
+    setHabits((prev) =>
+      prev.map((h) =>
+        h.id === id
+          ? {
+              ...h,
+              days: h.days.includes(day)
+                ? h.days.filter((d) => d !== day)
+                : [...h.days, day],
+            }
+          : h
+      )
+    );
+    try {
+      await api.toggleHabit(id, day);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const removeHabit = async (id: string) => {
+    try {
+      await api.deleteHabit(id);
+      setHabits((prev) => prev.filter((h) => h.id !== id));
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  // --- Eisenhower: kvadrantni o'rnatish ---
+  const setQuadrant = (id: string, q: number) => patchTask(id, { eisenhower: q });
+
+  // --- Kalendar: berilgan kunga vazifa qo'shish ---
+  const addForDay = async (dayISO: string) => {
+    const due = new Date(`${dayISO}T12:00:00`);
+    try {
+      const created = await api.createTask({
+        title: "Yangi vazifa",
+        due_date: due.toISOString(),
+      });
+      upsertTask(created);
+      setSelectedId(created.id);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
   const heading =
     selection.kind === "project"
       ? projects.find((p) => p.id === selection.id)?.name ?? "Loyiha"
-      : selection.view === "today"
+      : selection.kind === "smart" && selection.view === "today"
       ? "Bugun"
-      : selection.view === "upcoming"
+      : selection.kind === "smart" && selection.view === "upcoming"
       ? "Kelgusi"
       : "Barcha vazifalar";
+
+  const renderPage = () => {
+    if (selection.kind !== "page") return null;
+    switch (selection.page) {
+      case "calendar":
+        return <CalendarPage tasks={tasks} onSelectTask={setSelectedId} onAddForDay={addForDay} />;
+      case "eisenhower":
+        return <EisenhowerPage tasks={tasks} onSetQuadrant={setQuadrant} onSelectTask={setSelectedId} />;
+      case "habits":
+        return (
+          <HabitsPage habits={habits} onCreate={addHabit} onToggle={toggleHabit} onDelete={removeHabit} />
+        );
+      case "pomodoro":
+        return <PomodoroPage />;
+      case "countdown":
+        return <CountdownPage />;
+    }
+  };
 
   return (
     <div className="app">
@@ -205,6 +288,9 @@ export default function Workspace({ user, onLogout }: Props) {
         onDeleteProject={removeProject}
       />
 
+      {selection.kind === "page" ? (
+        renderPage()
+      ) : (
       <main className="main">
         <header className="main-head">
           <h2>{heading}</h2>
@@ -248,6 +334,7 @@ export default function Workspace({ user, onLogout }: Props) {
           )}
         </div>
       </main>
+      )}
 
       {selectedTask && (
         <TaskDetail

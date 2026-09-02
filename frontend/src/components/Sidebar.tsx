@@ -1,9 +1,20 @@
 import { useState } from "react";
 import type { Project, User } from "../types";
 
+export type Page = "calendar" | "eisenhower" | "habits" | "pomodoro" | "countdown";
+
 export type Selection =
   | { kind: "smart"; view: "today" | "upcoming" | "all" }
-  | { kind: "project"; id: string };
+  | { kind: "project"; id: string }
+  | { kind: "page"; page: Page };
+
+const PAGES: { page: Page; label: string; icon: string }[] = [
+  { page: "calendar", label: "Kalendar", icon: "📆" },
+  { page: "eisenhower", label: "Eisenhower", icon: "🧭" },
+  { page: "habits", label: "Odatlar", icon: "🔥" },
+  { page: "pomodoro", label: "Pomodoro", icon: "🍅" },
+  { page: "countdown", label: "Sanoq (countdown)", icon: "⏳" },
+];
 
 interface Props {
   projects: Project[];
@@ -59,6 +70,23 @@ export function Sidebar({
               <span className="nav-icon">{s.icon}</span>
               <span className="nav-label">{s.label}</span>
               <span className="nav-count">{counts[s.view]}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="nav-heading">Vositalar</div>
+      <nav className="nav-group">
+        {PAGES.map((p) => {
+          const active = selection.kind === "page" && selection.page === p.page;
+          return (
+            <button
+              key={p.page}
+              className={`nav-item ${active ? "active" : ""}`}
+              onClick={() => onSelect({ kind: "page", page: p.page })}
+            >
+              <span className="nav-icon">{p.icon}</span>
+              <span className="nav-label">{p.label}</span>
             </button>
           );
         })}

@@ -11,6 +11,11 @@ vazifa boshqaruvchi.
 - 🔁 Takrorlanuvchi vazifalar (har kuni / hafta / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
 - ⏰ Eslatmalar (brauzer bildirishnomalari orqali)
 - 📅 Aqlli ko'rinishlar: **Bugun**, **Kelgusi**, **Barchasi**
+- 📆 **Kalendar** — vazifalar oylik gridda, kunga bosib vazifa qo'shish
+- 🧭 **Eisenhower matritsasi** — 4 kvadrant, drag-and-drop bilan
+- 🔥 **Odatlar (habit tracker)** — chastota (har kuni / haftada N marta) va davomiylik (kun soni / sanagacha / doimiy) tanlanadi; kunlik belgilash, streak, progress %
+- 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar
+- ⏳ **Countdown** — muhim sanalargacha sanoq (localStorage)
 
 ## Texnologiyalar
 
@@ -86,11 +91,16 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | PATCH  | `/tasks/:id`             | Tahrirlash |
 | POST   | `/tasks/:id/complete`    | Bajarilgan (takrorlanuvchi bo'lsa — surish) |
 | DELETE | `/tasks/:id`             | O'chirish |
+| GET    | `/habits`                | Odatlar + oxirgi 90 kunlik bajarilgan kunlar |
+| POST   | `/habits`                | Odat yaratish (`frequency`, `target_per_week`, `duration_days` yoki `end_date`) |
+| PATCH  | `/habits/:id`            | Tahrirlash |
+| DELETE | `/habits/:id`            | O'chirish |
+| POST   | `/habits/:id/toggle`     | Kun belgisini almashtirish (`{ "day": "YYYY-MM-DD" }`) |
 
 ## Keyingi qadamlar (g'oyalar)
 
-- Kalendar ko'rinishi (oylik grid)
 - Subtasklar (checklist)
-- Drag-and-drop tartiblash
+- Vazifalarni drag-and-drop bilan tartiblash
+- Pomodoro sessiyalarini serverga yozish (statistika)
 - Ko'p qurilma sinxronizatsiyasi (auth allaqachon bor)
 - Server tomonda eslatma push (masalan, web-push yoki Telegram bot)

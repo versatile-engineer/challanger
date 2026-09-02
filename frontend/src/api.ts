@@ -1,4 +1,4 @@
-import type { Project, Task, User } from "./types";
+import type { Habit, Project, Task, User } from "./types";
 
 const BASE = "/api";
 const TOKEN_KEY = "challanger_token";
@@ -81,4 +81,24 @@ export const api = {
     req<Task>(`/tasks/${id}/complete`, { method: "POST" }),
   deleteTask: (id: string) =>
     req<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE" }),
+
+  // --- Odatlar (habit tracker) ---
+  listHabits: () => req<Habit[]>("/habits"),
+  createHabit: (data: {
+    name: string;
+    color?: string;
+    frequency?: "daily" | "weekly";
+    target_per_week?: number;
+    duration_days?: number;
+    end_date?: string | null;
+  }) => req<Habit>("/habits", { method: "POST", body: JSON.stringify(data) }),
+  updateHabit: (id: string, data: Partial<Habit>) =>
+    req<Habit>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteHabit: (id: string) =>
+    req<{ ok: boolean }>(`/habits/${id}`, { method: "DELETE" }),
+  toggleHabit: (id: string, day: string) =>
+    req<{ day: string; done: boolean }>(`/habits/${id}/toggle`, {
+      method: "POST",
+      body: JSON.stringify({ day }),
+    }),
 };

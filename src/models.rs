@@ -42,6 +42,7 @@ pub struct Task {
     pub priority: i16,
     pub recurrence: Option<String>,
     pub reminder_at: Option<DateTime<Utc>>,
+    pub eisenhower: Option<i16>,
     pub position: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -76,6 +77,8 @@ pub struct UpdateTask {
     pub recurrence: Option<Option<String>>,
     #[serde(default, deserialize_with = "double_option")]
     pub reminder_at: Option<Option<DateTime<Utc>>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub eisenhower: Option<Option<i16>>,
     pub position: Option<f64>,
 }
 
