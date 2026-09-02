@@ -4,6 +4,7 @@ use axum::{Json, Router};
 use chrono::{DateTime, Datelike, Duration, Utc};
 use uuid::Uuid;
 
+use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{CreateTask, Task, TaskQuery, UpdateTask};
 use crate::AppState;
@@ -17,12 +18,13 @@ pub fn router() -> Router<AppState> {
 
 async fn list(
     State(st): State<AppState>,
+    user: AuthUser,
     Query(q): Query<TaskQuery>,
 ) -> AppResult<Json<Vec<Task>>> {
-    // Dinamik filtrlash o'rniga soddalik uchun bir necha holatni qamraymiz.
-    let mut sql = String::from("SELECT * FROM tasks WHERE 1=1");
+    // $1 doim user_id; project_id berilsa $2.
+    let mut sql = String::from("SELECT * FROM tasks WHERE user_id = $1");
     if q.project_id.is_some() {
-        sql.push_str(" AND project_id = $1");
+        sql.push_str(" AND project_id = $2");
     }
     if let Some(c) = q.completed {
         sql.push_str(&format!(" AND completed = {c}"));
@@ -35,7 +37,7 @@ async fn list(
     }
     sql.push_str(" ORDER BY completed, priority DESC, due_date NULLS LAST, position, created_at");
 
-    let mut query = sqlx::query_as::<_, Task>(&sql);
+    let mut query = sqlx::query_as::<_, Task>(&sql).bind(user.id);
     if let Some(pid) = q.project_id {
         query = query.bind(pid);
     }
@@ -43,9 +45,14 @@ async fn list(
     Ok(Json(rows))
 }
 
-async fn get_one(State(st): State<AppState>, Path(id): Path<Uuid>) -> AppResult<Json<Task>> {
-    let row = sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1")
+async fn get_one(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Task>> {
+    let row = sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1 AND user_id = $2")
         .bind(id)
+        .bind(user.id)
         .fetch_optional(&st.db)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -54,15 +61,17 @@ async fn get_one(State(st): State<AppState>, Path(id): Path<Uuid>) -> AppResult<
 
 async fn create(
     State(st): State<AppState>,
+    user: AuthUser,
     Json(body): Json<CreateTask>,
 ) -> AppResult<Json<Task>> {
     if body.title.trim().is_empty() {
         return Err(AppError::BadRequest("sarlavha bo'sh bo'lishi mumkin emas".into()));
     }
     let row = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (title, project_id, notes, due_date, priority, recurrence, reminder_at, position)
+        "INSERT INTO tasks (title, project_id, notes, due_date, priority, recurrence, reminder_at, position, user_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7,
-                 COALESCE((SELECT MAX(position) + 1 FROM tasks), 0))
+                 COALESCE((SELECT MAX(position) + 1 FROM tasks WHERE user_id = $8), 0),
+                 $8)
          RETURNING *",
     )
     .bind(body.title.trim())
@@ -72,6 +81,7 @@ async fn create(
     .bind(body.priority.clamp(0, 3))
     .bind(body.recurrence)
     .bind(body.reminder_at)
+    .bind(user.id)
     .fetch_one(&st.db)
     .await?;
     Ok(Json(row))
@@ -79,30 +89,32 @@ async fn create(
 
 async fn update(
     State(st): State<AppState>,
+    user: AuthUser,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateTask>,
 ) -> AppResult<Json<Task>> {
     // COALESCE + double_option: `Some(None)` => NULLga o'rnatish, `None` => tegmaslik.
     let row = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET
-            title       = COALESCE($2, title),
-            notes       = COALESCE($3, notes),
-            completed   = COALESCE($4, completed),
+            title       = COALESCE($3, title),
+            notes       = COALESCE($4, notes),
+            completed   = COALESCE($5, completed),
             completed_at = CASE
-                WHEN $4 IS TRUE  THEN now()
-                WHEN $4 IS FALSE THEN NULL
+                WHEN $5 IS TRUE  THEN now()
+                WHEN $5 IS FALSE THEN NULL
                 ELSE completed_at END,
-            project_id  = CASE WHEN $5 THEN $6 ELSE project_id END,
-            due_date    = CASE WHEN $7 THEN $8 ELSE due_date END,
-            priority    = COALESCE($9, priority),
-            recurrence  = CASE WHEN $10 THEN $11 ELSE recurrence END,
-            reminder_at = CASE WHEN $12 THEN $13 ELSE reminder_at END,
-            position    = COALESCE($14, position),
+            project_id  = CASE WHEN $6 THEN $7 ELSE project_id END,
+            due_date    = CASE WHEN $8 THEN $9 ELSE due_date END,
+            priority    = COALESCE($10, priority),
+            recurrence  = CASE WHEN $11 THEN $12 ELSE recurrence END,
+            reminder_at = CASE WHEN $13 THEN $14 ELSE reminder_at END,
+            position    = COALESCE($15, position),
             updated_at  = now()
-         WHERE id = $1
+         WHERE id = $1 AND user_id = $2
          RETURNING *",
     )
     .bind(id)
+    .bind(user.id)
     .bind(body.title)
     .bind(body.notes)
     .bind(body.completed)
@@ -125,9 +137,14 @@ async fn update(
 /// Vazifani bajarilgan deb belgilash.
 /// Agar takrorlanuvchi bo'lsa — bajarilgan deb belgilanmaydi,
 /// balki muddati keyingi takrorga suriladi.
-async fn complete(State(st): State<AppState>, Path(id): Path<Uuid>) -> AppResult<Json<Task>> {
-    let task = sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1")
+async fn complete(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Task>> {
+    let task = sqlx::query_as::<_, Task>("SELECT * FROM tasks WHERE id = $1 AND user_id = $2")
         .bind(id)
+        .bind(user.id)
         .fetch_optional(&st.db)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -160,9 +177,14 @@ async fn complete(State(st): State<AppState>, Path(id): Path<Uuid>) -> AppResult
     }
 }
 
-async fn delete(State(st): State<AppState>, Path(id): Path<Uuid>) -> AppResult<Json<serde_json::Value>> {
-    let res = sqlx::query("DELETE FROM tasks WHERE id = $1")
+async fn delete(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let res = sqlx::query("DELETE FROM tasks WHERE id = $1 AND user_id = $2")
         .bind(id)
+        .bind(user.id)
         .execute(&st.db)
         .await?;
     if res.rows_affected() == 0 {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Project } from "../types";
+import type { Project, User } from "../types";
 
 export type Selection =
   | { kind: "smart"; view: "today" | "upcoming" | "all" }
@@ -9,6 +9,8 @@ interface Props {
   projects: Project[];
   counts: { today: number; upcoming: number; all: number; byProject: Record<string, number> };
   selection: Selection;
+  user: User;
+  onLogout: () => void;
   onSelect: (s: Selection) => void;
   onCreateProject: (name: string) => void;
   onDeleteProject: (id: string) => void;
@@ -24,6 +26,8 @@ export function Sidebar({
   projects,
   counts,
   selection,
+  user,
+  onLogout,
   onSelect,
   onCreateProject,
   onDeleteProject,
@@ -90,6 +94,16 @@ export function Sidebar({
           placeholder="+ Yangi loyiha"
         />
       </form>
+
+      <div className="sidebar-footer">
+        <div className="user-info">
+          <span className="avatar">{user.username.charAt(0).toUpperCase()}</span>
+          <span className="username" title={user.email}>{user.username}</span>
+        </div>
+        <button className="logout" onClick={onLogout} title="Chiqish">
+          ⎋
+        </button>
+      </div>
     </aside>
   );
 }

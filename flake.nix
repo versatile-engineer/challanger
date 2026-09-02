@@ -79,6 +79,8 @@
               PGDATA = "./.pg/data";
               PGHOST = "localhost";
               PGPORT = "5433";
+              # Dev uchun JWT maxfiy kaliti (productionda o'zgartiring!)
+              JWT_SECRET = "dev-secret-challanger-2026";
             };
           };
         }

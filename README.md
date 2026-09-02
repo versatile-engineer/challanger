@@ -5,6 +5,7 @@ vazifa boshqaruvchi.
 
 ## Imkoniyatlar
 
+- 🔐 Autentifikatsiya — ro'yxatdan o'tish (username + email + parol) va kirish (email + parol), JWT tokenlar
 - ✅ Vazifalar CRUD — sarlavha, izoh, muddat (due), prioritet (0–3), holat
 - 📁 Loyihalar / ro'yxatlar va teglar
 - 🔁 Takrorlanuvchi vazifalar (har kuni / hafta / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
@@ -69,10 +70,13 @@ Migratsiyalar backend ishga tushganda avtomatik qo'llanadi (`migrations/`).
 
 ## API
 
-Barcha yo'llar `/api` ostida:
+Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <token>` talab qiladi:
 
 | Metod  | Yo'l                     | Tavsif |
 |--------|--------------------------|--------|
+| POST   | `/auth/signup`           | Ro'yxatdan o'tish (`username`, `email`, `password`) → token |
+| POST   | `/auth/login`            | Kirish (`email`, `password`) → token |
+| GET    | `/auth/me`               | Joriy foydalanuvchi (token bilan) |
 | GET    | `/projects`              | Loyihalar ro'yxati |
 | POST   | `/projects`              | Loyiha yaratish |
 | PATCH  | `/projects/:id`          | Tahrirlash |
@@ -88,5 +92,5 @@ Barcha yo'llar `/api` ostida:
 - Kalendar ko'rinishi (oylik grid)
 - Subtasklar (checklist)
 - Drag-and-drop tartiblash
-- Autentifikatsiya + ko'p qurilma sinxronizatsiyasi
+- Ko'p qurilma sinxronizatsiyasi (auth allaqachon bor)
 - Server tomonda eslatma push (masalan, web-push yoki Telegram bot)
