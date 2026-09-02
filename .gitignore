@@ -1,0 +1,7 @@
+/target
+/.pg
+/.direnv
+node_modules
+dist
+.env
+*.log
