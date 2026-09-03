@@ -9,13 +9,16 @@ import { EisenhowerPage } from "./components/EisenhowerPage";
 import { HabitsPage } from "./components/HabitsPage";
 import { PomodoroPage } from "./components/PomodoroPage";
 import { CountdownPage } from "./components/CountdownPage";
+import { GroupsPage } from "./components/GroupsPage";
+import { SettingsPage } from "./components/SettingsPage";
 
 interface Props {
   user: User;
   onLogout: () => void;
+  onUserUpdate: (u: User) => void;
 }
 
-export default function Workspace({ user, onLogout }: Props) {
+export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -269,6 +272,10 @@ export default function Workspace({ user, onLogout }: Props) {
         return <PomodoroPage />;
       case "countdown":
         return <CountdownPage />;
+      case "groups":
+        return <GroupsPage user={user} />;
+      case "settings":
+        return <SettingsPage user={user} onUserUpdate={onUserUpdate} onLogout={onLogout} />;
     }
   };
 

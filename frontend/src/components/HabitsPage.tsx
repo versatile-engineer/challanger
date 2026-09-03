@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "../api";
 import type { Habit } from "../types";
 
@@ -13,11 +13,29 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function lastDays(n: number): Date[] {
-  const out: Date[] = [];
+/// Odat uchun ko'rsatiladigan kunlar.
+/// - Challenge (tugash sanasi bor): boshlanishdan tugash sanasigacha — butun davr.
+/// - Doimiy odat: boshlanishdan bugungacha, lekin ko'pi bilan oxirgi 30 kun.
+function habitDays(h: Habit): Date[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let i = n - 1; i >= 0; i--) out.push(new Date(today.getTime() - i * 86400000));
+  const start = new Date(h.start_date + "T00:00:00");
+  start.setHours(0, 0, 0, 0);
+
+  const end = effectiveEnd(h);
+  let from = start.getTime();
+  let to: number;
+  if (end) {
+    end.setHours(0, 0, 0, 0);
+    to = end.getTime();
+  } else {
+    // Doimiy: bugungacha, oxirgi 30 kun bilan cheklab
+    to = today.getTime();
+    from = Math.max(start.getTime(), today.getTime() - 29 * 86400000);
+  }
+
+  const out: Date[] = [];
+  for (let t = from; t <= to; t += 86400000) out.push(new Date(t));
   return out;
 }
 
@@ -205,7 +223,6 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
 // -------- Sahifa --------
 
 export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
-  const strip = useMemo(() => lastDays(14), []);
   const todayKey = ymd(new Date());
 
   return (
@@ -255,16 +272,22 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
               )}
 
               <div className="habit-strip">
-                {strip.map((d) => {
+                {habitDays(h).map((d) => {
                   const key = ymd(d);
                   const done = set.has(key);
+                  const isToday = key === todayKey;
+                  const isFuture = key > todayKey;
+                  // Faqat bugungi kunga belgi qo'yish mumkin
                   return (
                     <button
                       key={key}
-                      className={`habit-day ${done ? "done" : ""} ${key === todayKey ? "today" : ""}`}
+                      disabled={!isToday}
+                      className={`habit-day ${done ? "done" : ""} ${isToday ? "today" : ""} ${
+                        isFuture ? "future" : ""
+                      } ${!isToday ? "locked" : ""}`}
                       style={done ? { background: h.color, borderColor: h.color } : undefined}
-                      title={key}
-                      onClick={() => onToggle(h.id, key)}
+                      title={isToday ? key : `${key} (faqat bugun belgilanadi)`}
+                      onClick={() => isToday && onToggle(h.id, key)}
                     >
                       {d.getDate()}
                     </button>

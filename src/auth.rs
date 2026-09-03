@@ -64,6 +64,18 @@ pub struct AuthResponse {
     pub user: PublicUser,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfile {
+    pub username: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePassword {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 // ---------- JWT ----------
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,6 +106,25 @@ fn hash_password(password: &str) -> AppResult<String> {
         .hash_password(password.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|_| AppError::BadRequest("parolni hashlab bo'lmadi".into()))
+}
+
+/// Username: 3–20 belgi, faqat kichik harflar (a-z) va raqamlar. Bo'sh joy yo'q.
+fn validate_username(username: &str) -> AppResult<()> {
+    let len = username.chars().count();
+    if len < 3 || len > 20 {
+        return Err(AppError::BadRequest(
+            "foydalanuvchi nomi 3–20 ta belgidan iborat bo'lsin".into(),
+        ));
+    }
+    if !username
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    {
+        return Err(AppError::BadRequest(
+            "faqat kichik harflar (a-z) va raqamlar ishlatilsin".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn verify_password(password: &str, hash: &str) -> bool {
@@ -147,18 +178,17 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/login", post(login))
-        .route("/auth/me", get(me))
+        .route("/auth/me", get(me).patch(update_me).delete(delete_me))
+        .route("/auth/password", post(change_password))
 }
 
 async fn signup(
     State(st): State<AppState>,
     Json(body): Json<SignupBody>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
-    let username = body.username.trim();
+    let username = body.username.trim().to_lowercase();
     let email = body.email.trim().to_lowercase();
-    if username.is_empty() {
-        return Err(AppError::BadRequest("foydalanuvchi nomi bo'sh".into()));
-    }
+    validate_username(&username)?;
     if !email.contains('@') {
         return Err(AppError::BadRequest("email noto'g'ri".into()));
     }
@@ -172,14 +202,19 @@ async fn signup(
         "INSERT INTO users (username, email, password_hash)
          VALUES ($1, $2, $3) RETURNING *",
     )
-    .bind(username)
+    .bind(&username)
     .bind(&email)
     .bind(hash)
     .fetch_one(&st.db)
     .await
     .map_err(|e| match e {
         sqlx::Error::Database(db) if db.is_unique_violation() => {
-            AppError::BadRequest("bu email allaqachon ro'yxatdan o'tgan".into())
+            // Qaysi maydon takrorlanganini indeks nomidan aniqlaymiz
+            if db.constraint().is_some_and(|c| c.contains("username")) {
+                AppError::BadRequest("bu foydalanuvchi nomi band".into())
+            } else {
+                AppError::BadRequest("bu email allaqachon ro'yxatdan o'tgan".into())
+            }
         }
         other => AppError::Db(other),
     })?;
@@ -223,4 +258,94 @@ async fn me(State(st): State<AppState>, user: AuthUser) -> AppResult<Json<Public
         .await?
         .ok_or(AppError::Unauthorized)?;
     Ok(Json(u.into()))
+}
+
+/// Profilni yangilash (username va/yoki email)
+async fn update_me(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Json(body): Json<UpdateProfile>,
+) -> AppResult<Json<PublicUser>> {
+    let username = match body.username {
+        Some(u) => {
+            let u = u.trim().to_lowercase();
+            validate_username(&u)?;
+            Some(u)
+        }
+        None => None,
+    };
+    let email = match body.email {
+        Some(e) => {
+            let e = e.trim().to_lowercase();
+            if !e.contains('@') {
+                return Err(AppError::BadRequest("email noto'g'ri".into()));
+            }
+            Some(e)
+        }
+        None => None,
+    };
+
+    let u = sqlx::query_as::<_, User>(
+        "UPDATE users SET
+            username = COALESCE($2, username),
+            email    = COALESCE($3, email)
+         WHERE id = $1
+         RETURNING *",
+    )
+    .bind(user.id)
+    .bind(username)
+    .bind(email)
+    .fetch_one(&st.db)
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::Database(db) if db.is_unique_violation() => {
+            if db.constraint().is_some_and(|c| c.contains("username")) {
+                AppError::BadRequest("bu foydalanuvchi nomi band".into())
+            } else {
+                AppError::BadRequest("bu email allaqachon ro'yxatdan o'tgan".into())
+            }
+        }
+        other => AppError::Db(other),
+    })?;
+    Ok(Json(u.into()))
+}
+
+/// Parolni o'zgartirish (joriy parolni tekshirib)
+async fn change_password(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Json(body): Json<ChangePassword>,
+) -> AppResult<Json<serde_json::Value>> {
+    if body.new_password.len() < 6 {
+        return Err(AppError::BadRequest("yangi parol kamida 6 ta belgidan iborat bo'lsin".into()));
+    }
+    let u = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_optional(&st.db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+
+    if !verify_password(&body.current_password, &u.password_hash) {
+        return Err(AppError::BadRequest("joriy parol noto'g'ri".into()));
+    }
+
+    let hash = hash_password(&body.new_password)?;
+    sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
+        .bind(user.id)
+        .bind(hash)
+        .execute(&st.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Hisobni o'chirish (barcha vazifa/loyiha/odatlar ham o'chadi — ON DELETE CASCADE)
+async fn delete_me(
+    State(st): State<AppState>,
+    user: AuthUser,
+) -> AppResult<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user.id)
+        .execute(&st.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

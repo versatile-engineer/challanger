@@ -47,11 +47,19 @@ export function AuthScreen({ onAuth }: Props) {
             <span>Foydalanuvchi nomi</span>
             <input
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) =>
+                // Faqat kichik harflar va raqamlar (bo'sh joy va boshqa belgilar olib tashlanadi)
+                setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))
+              }
               placeholder="rustacean"
+              minLength={3}
+              maxLength={20}
               required
               autoFocus
             />
+            <small className="auth-hint">
+              Faqat kichik harflar va raqamlar · noyob bo'lishi kerak
+            </small>
           </label>
         )}
 

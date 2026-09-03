@@ -39,5 +39,5 @@ export default function App() {
     return <AuthScreen onAuth={setUser} />;
   }
 
-  return <Workspace user={user} onLogout={logout} />;
+  return <Workspace user={user} onLogout={logout} onUserUpdate={setUser} />;
 }

@@ -16,6 +16,7 @@ vazifa boshqaruvchi.
 - 🔥 **Odatlar (habit tracker)** — chastota (har kuni / haftada N marta) va davomiylik (kun soni / sanagacha / doimiy) tanlanadi; kunlik belgilash, streak, progress %
 - 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar
 - ⏳ **Countdown** — muhim sanalargacha sanoq (localStorage)
+- ⚙️ **Sozlamalar** — profil (username/email), parol o'zgartirish, mavzu (tizim/yorug'/qorong'i), hisobni o'chirish
 
 ## Texnologiyalar
 
@@ -82,6 +83,9 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | POST   | `/auth/signup`           | Ro'yxatdan o'tish (`username`, `email`, `password`) → token |
 | POST   | `/auth/login`            | Kirish (`email`, `password`) → token |
 | GET    | `/auth/me`               | Joriy foydalanuvchi (token bilan) |
+| PATCH  | `/auth/me`               | Profilni yangilash (`username`, `email`) |
+| DELETE | `/auth/me`               | Hisobni o'chirish (kaskad: vazifa/loyiha/odat) |
+| POST   | `/auth/password`         | Parol o'zgartirish (`current_password`, `new_password`) |
 | GET    | `/projects`              | Loyihalar ro'yxati |
 | POST   | `/projects`              | Loyiha yaratish |
 | PATCH  | `/projects/:id`          | Tahrirlash |

@@ -59,7 +59,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(auth::router())
         .merge(routes::projects::router())
         .merge(routes::tasks::router())
-        .merge(routes::habits::router());
+        .merge(routes::habits::router())
+        .merge(routes::groups::router());
 
     let app = Router::new()
         .nest("/api", api)

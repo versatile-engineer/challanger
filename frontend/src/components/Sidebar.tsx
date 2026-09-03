@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Project, User } from "../types";
 
-export type Page = "calendar" | "eisenhower" | "habits" | "pomodoro" | "countdown";
+export type Page = "calendar" | "eisenhower" | "habits" | "groups" | "pomodoro" | "countdown" | "settings";
 
 export type Selection =
   | { kind: "smart"; view: "today" | "upcoming" | "all" }
@@ -12,6 +12,7 @@ const PAGES: { page: Page; label: string; icon: string }[] = [
   { page: "calendar", label: "Kalendar", icon: "📆" },
   { page: "eisenhower", label: "Eisenhower", icon: "🧭" },
   { page: "habits", label: "Odatlar", icon: "🔥" },
+  { page: "groups", label: "Jamoa", icon: "👥" },
   { page: "pomodoro", label: "Pomodoro", icon: "🍅" },
   { page: "countdown", label: "Sanoq (countdown)", icon: "⏳" },
 ];
@@ -124,10 +125,15 @@ export function Sidebar({
       </form>
 
       <div className="sidebar-footer">
-        <div className="user-info">
+        <button
+          className={`user-info ${selection.kind === "page" && selection.page === "settings" ? "active" : ""}`}
+          onClick={() => onSelect({ kind: "page", page: "settings" })}
+          title="Sozlamalar"
+        >
           <span className="avatar">{user.username.charAt(0).toUpperCase()}</span>
-          <span className="username" title={user.email}>{user.username}</span>
-        </div>
+          <span className="username">{user.username}</span>
+          <span className="gear">⚙️</span>
+        </button>
         <button className="logout" onClick={onLogout} title="Chiqish">
           ⎋
         </button>

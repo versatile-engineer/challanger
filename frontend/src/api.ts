@@ -1,4 +1,4 @@
-import type { Habit, Project, Task, User } from "./types";
+import type { GroupDetail, GroupHabit, GroupSummary, Habit, Project, Task, User } from "./types";
 
 const BASE = "/api";
 const TOKEN_KEY = "challanger_token";
@@ -54,6 +54,11 @@ export const api = {
   login: (data: { email: string; password: string }) =>
     req<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   me: () => req<User>("/auth/me"),
+  updateProfile: (data: { username?: string; email?: string }) =>
+    req<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    req<{ ok: boolean }>("/auth/password", { method: "POST", body: JSON.stringify(data) }),
+  deleteAccount: () => req<{ ok: boolean }>("/auth/me", { method: "DELETE" }),
 
   // --- Loyihalar ---
   listProjects: () => req<Project[]>("/projects"),
@@ -98,6 +103,38 @@ export const api = {
     req<{ ok: boolean }>(`/habits/${id}`, { method: "DELETE" }),
   toggleHabit: (id: string, day: string) =>
     req<{ day: string; done: boolean }>(`/habits/${id}/toggle`, {
+      method: "POST",
+      body: JSON.stringify({ day }),
+    }),
+
+  // --- Jamoa (groupwork) ---
+  listGroups: () => req<GroupSummary[]>("/groups"),
+  createGroup: (name: string) =>
+    req<GroupSummary>("/groups", { method: "POST", body: JSON.stringify({ name }) }),
+  joinGroup: (code: string) =>
+    req<{ ok: boolean; group_id: string }>("/groups/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  getGroup: (id: string) => req<GroupDetail>(`/groups/${id}`),
+  deleteGroup: (id: string) => req<{ ok: boolean }>(`/groups/${id}`, { method: "DELETE" }),
+  leaveGroup: (id: string) =>
+    req<{ ok: boolean }>(`/groups/${id}/leave`, { method: "POST" }),
+  addGroupMember: (id: string, username: string) =>
+    req<{ ok: boolean }>(`/groups/${id}/members`, {
+      method: "POST",
+      body: JSON.stringify({ username }),
+    }),
+  removeGroupMember: (id: string, uid: string) =>
+    req<{ ok: boolean }>(`/groups/${id}/members/${uid}`, { method: "DELETE" }),
+  createGroupHabit: (
+    id: string,
+    data: { name: string; color?: string; frequency?: "daily" | "weekly"; target_per_week?: number }
+  ) => req<GroupHabit>(`/groups/${id}/habits`, { method: "POST", body: JSON.stringify(data) }),
+  deleteGroupHabit: (id: string, hid: string) =>
+    req<{ ok: boolean }>(`/groups/${id}/habits/${hid}`, { method: "DELETE" }),
+  toggleGroupHabit: (hid: string, day: string) =>
+    req<{ day: string; done: boolean }>(`/group-habits/${hid}/toggle`, {
       method: "POST",
       body: JSON.stringify({ day }),
     }),

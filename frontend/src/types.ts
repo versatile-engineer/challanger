@@ -48,6 +48,42 @@ export interface Habit {
   days: string[]; // bajarilgan kunlar (ISO sana)
 }
 
+// ---- Jamoa (groupwork) ----
+export interface GroupSummary {
+  id: string;
+  name: string;
+  invite_code: string;
+  owner_id: string;
+  role: "owner" | "member";
+  member_count: number;
+}
+
+export interface GroupMember {
+  user_id: string;
+  username: string;
+  role: "owner" | "member";
+  joined_at: string;
+}
+
+export interface GroupHabit {
+  id: string;
+  name: string;
+  color: string;
+  frequency: HabitFrequency;
+  target_per_week: number;
+  created_at: string;
+  entries: Record<string, string[]>; // user_id -> bajarilgan kunlar (ISO)
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  invite_code: string;
+  owner_id: string;
+  members: GroupMember[];
+  habits: GroupHabit[];
+}
+
 export const PRIORITY_LABELS: Record<number, string> = {
   0: "Yo'q",
   1: "Past",
