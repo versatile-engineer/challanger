@@ -9,20 +9,25 @@ vazifa boshqaruvchi.
 - ✅ Vazifalar CRUD — sarlavha, izoh, muddat (due), prioritet (0–3), holat
 - 📁 Loyihalar / ro'yxatlar va teglar
 - 🔁 Takrorlanuvchi vazifalar (har kuni / hafta / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
-- ⏰ Eslatmalar (brauzer bildirishnomalari orqali)
+- ⏰ Eslatmalar — brauzer bildirishnomalari **va Telegram bot** orqali
+- 🤖 **Telegram bot** — hisobni ulab, vazifa eslatmalarini Telegram'da xabar sifatida olish (`/today`, `/help` buyruqlari)
 - 📅 Aqlli ko'rinishlar: **Bugun**, **Kelgusi**, **Barchasi**
 - 📆 **Kalendar** — vazifalar oylik gridda, kunga bosib vazifa qo'shish
 - 🧭 **Eisenhower matritsasi** — 4 kvadrant, drag-and-drop bilan
 - 🔥 **Odatlar (habit tracker)** — chastota (har kuni / haftada N marta) va davomiylik (kun soni / sanagacha / doimiy) tanlanadi; kunlik belgilash, streak, progress %
+- 🧩 **Kichik qadamlar (subtasklar)** — har vazifa ichida checklist va progress
+- 👥 **Jamoa (groupwork)** — guruh yaratish/qo'shilish, jamoaviy odat va vazifalar, reaksiyalar, leaderboard
+- 📊 **Statistika** — vazifa/odat grafiklari (donut, bar, ustunlar)
 - 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar
 - ⏳ **Countdown** — muhim sanalargacha sanoq (localStorage)
-- ⚙️ **Sozlamalar** — profil (username/email), parol o'zgartirish, mavzu (tizim/yorug'/qorong'i), hisobni o'chirish
+- ⌨️ **Buyruqlar paneli (Ctrl+K)** — tez navigatsiya va amallar
+- ⚙️ **Sozlamalar** — profil (username/email), parol o'zgartirish, mavzu (tizim / yorug' / qorong'i / **gruvbox**), Telegram ulash, zaxira (eksport/import), hisobni o'chirish
 
 ## Texnologiyalar
 
 | Qatlam    | Texnologiya |
 |-----------|-------------|
-| Backend   | Rust, Axum, SQLx, Tokio |
+| Backend   | Rust, Axum, SQLx, Tokio, reqwest (Telegram) |
 | Baza      | PostgreSQL 16 (loyiha ichida, docker kerak emas) |
 | Frontend  | React 18, Vite, TypeScript |
 | Muhit     | Nix flake + direnv |
@@ -74,6 +79,26 @@ scripts/pg.sh reset     # o'chirib qayta yaratish
 
 Migratsiyalar backend ishga tushganda avtomatik qo'llanadi (`migrations/`).
 
+## Telegram bot (ixtiyoriy)
+
+Bot vazifa eslatmalarini Telegram'ga xabar sifatida yuboradi. Sozlash uch qadam:
+
+1. **Bot yarating** — Telegram'da [@BotFather](https://t.me/BotFather) → `/newbot` → tokenni oling.
+2. **`.env` ga qo'shing**:
+   ```bash
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   ```
+3. **Backendni qayta ishga tushiring** — logda `🤖 Telegram bot yoqildi: @sizning_bot` chiqadi.
+
+So'ng ilovada **Sozlamalar → Telegram eslatmalari → "Telegram'ni ulash"** → bot ochiladi → **Start** → **⟳ Tekshirish**.
+
+Ishlash tamoyili:
+- **Long polling** (`getUpdates`) — public HTTPS URL kerak emas, self-hosted serverda ham ishlaydi.
+- Fon vazifasi har 30 soniyada `reminder_at` yetgan, bajarilmagan vazifalarni topib xabar yuboradi (takror yubormaydi).
+- Token berilmasa bot jim o'chiq turadi — ilova avvalgidek ishlaydi.
+
+Bot buyruqlari: `/start <kod>` (ulash), `/today` (bugungi vazifalar), `/help`.
+
 ## API
 
 Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <token>` talab qiladi:
@@ -100,11 +125,14 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | PATCH  | `/habits/:id`            | Tahrirlash |
 | DELETE | `/habits/:id`            | O'chirish |
 | POST   | `/habits/:id/toggle`     | Kun belgisini almashtirish (`{ "day": "YYYY-MM-DD" }`) |
+| GET    | `/telegram/status`       | Bot sozlanganmi (`configured`) va hisob ulanganmi (`connected`) |
+| POST   | `/telegram/link`         | Bir martalik bog'lash kodi + deep-link qaytaradi |
+| POST   | `/telegram/unlink`       | Hisobni Telegram'dan uzadi |
+
+> Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa (`/groups*`) yo'llari ham mavjud — kod: `src/routes/`.
 
 ## Keyingi qadamlar (g'oyalar)
 
-- Subtasklar (checklist)
 - Vazifalarni drag-and-drop bilan tartiblash
 - Pomodoro sessiyalarini serverga yozish (statistika)
-- Ko'p qurilma sinxronizatsiyasi (auth allaqachon bor)
-- Server tomonda eslatma push (masalan, web-push yoki Telegram bot)
+- Telegram botga inline tugmalar (vazifani to'g'ridan-to'g'ri bajarish) va kunlik ertalabki xulosa
