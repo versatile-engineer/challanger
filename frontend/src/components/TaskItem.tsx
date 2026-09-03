@@ -7,9 +7,11 @@ interface Props {
   selected: boolean;
   onSelect: () => void;
   onComplete: () => void;
+  onTagClick?: (tag: string) => void;
+  subtaskCount?: { done: number; total: number };
 }
 
-export function TaskItem({ task, selected, onSelect, onComplete }: Props) {
+export function TaskItem({ task, selected, onSelect, onComplete, onTagClick, subtaskCount }: Props) {
   const due = formatDue(task.due_date);
   return (
     <div className={`task-item ${selected ? "selected" : ""} ${task.completed ? "done" : ""}`}>
@@ -32,6 +34,25 @@ export function TaskItem({ task, selected, onSelect, onComplete }: Props) {
           {task.recurrence && <span className="recur">🔁 {task.recurrence}</span>}
           {task.reminder_at && <span className="reminder">⏰</span>}
           {task.notes && <span className="has-notes">📝</span>}
+          {subtaskCount && subtaskCount.total > 0 && (
+            <span
+              className={`subtask-badge ${subtaskCount.done === subtaskCount.total ? "complete" : ""}`}
+            >
+              ☑ {subtaskCount.done}/{subtaskCount.total}
+            </span>
+          )}
+          {(task.tags ?? []).map((t) => (
+            <span
+              key={t}
+              className="task-tag"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTagClick?.(t);
+              }}
+            >
+              #{t}
+            </span>
+          ))}
         </div>
       </div>
     </div>

@@ -44,6 +44,7 @@ pub struct Task {
     pub reminder_at: Option<DateTime<Utc>>,
     pub eisenhower: Option<i16>,
     pub position: f64,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -59,6 +60,8 @@ pub struct CreateTask {
     pub priority: i16,
     pub recurrence: Option<String>,
     pub reminder_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// Barcha maydonlar ixtiyoriy — faqat berilganlari yangilanadi.
@@ -80,6 +83,7 @@ pub struct UpdateTask {
     #[serde(default, deserialize_with = "double_option")]
     pub eisenhower: Option<Option<i16>>,
     pub position: Option<f64>,
+    pub tags: Option<Vec<String>>,
 }
 
 /// JSON'da maydon berilgan-berilmaganini `null`dan ajratish uchun.

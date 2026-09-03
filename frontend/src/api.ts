@@ -1,4 +1,4 @@
-import type { GroupDetail, GroupHabit, GroupSummary, Habit, Project, Task, User } from "./types";
+import type { GroupDetail, GroupHabit, GroupSummary, GroupTask, Habit, Project, Subtask, Task, User } from "./types";
 
 const BASE = "/api";
 const TOKEN_KEY = "challanger_token";
@@ -87,6 +87,15 @@ export const api = {
   deleteTask: (id: string) =>
     req<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE" }),
 
+  // --- Kichik qadamlar (subtasks) ---
+  listSubtasks: () => req<Subtask[]>("/subtasks"),
+  createSubtask: (taskId: string, title: string) =>
+    req<Subtask>(`/tasks/${taskId}/subtasks`, { method: "POST", body: JSON.stringify({ title }) }),
+  updateSubtask: (id: string, data: Partial<Pick<Subtask, "title" | "done" | "position">>) =>
+    req<Subtask>(`/subtasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteSubtask: (id: string) =>
+    req<{ ok: boolean }>(`/subtasks/${id}`, { method: "DELETE" }),
+
   // --- Odatlar (habit tracker) ---
   listHabits: () => req<Habit[]>("/habits"),
   createHabit: (data: {
@@ -138,4 +147,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ day }),
     }),
+  reactGroupHabit: (hid: string, emoji: string) =>
+    req<{ emoji: string; active: boolean }>(`/group-habits/${hid}/react`, {
+      method: "POST",
+      body: JSON.stringify({ emoji }),
+    }),
+  createGroupTask: (id: string, title: string) =>
+    req<GroupTask>(`/groups/${id}/tasks`, { method: "POST", body: JSON.stringify({ title }) }),
+  toggleGroupTask: (tid: string) =>
+    req<GroupTask>(`/group-tasks/${tid}/toggle`, { method: "POST" }),
+  deleteGroupTask: (tid: string) =>
+    req<{ ok: boolean }>(`/group-tasks/${tid}`, { method: "DELETE" }),
 };

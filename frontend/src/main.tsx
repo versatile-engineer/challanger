@@ -12,3 +12,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>
 );
+
+// Service worker'ni ro'yxatdan o'tkazamiz (offline + o'rnatish uchun)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      /* SW ishlamasa — jim o'tamiz */
+    });
+  });
+}

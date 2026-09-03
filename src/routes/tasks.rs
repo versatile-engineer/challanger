@@ -68,10 +68,10 @@ async fn create(
         return Err(AppError::BadRequest("sarlavha bo'sh bo'lishi mumkin emas".into()));
     }
     let row = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (title, project_id, notes, due_date, priority, recurrence, reminder_at, position, user_id)
+        "INSERT INTO tasks (title, project_id, notes, due_date, priority, recurrence, reminder_at, position, user_id, tags)
          VALUES ($1, $2, $3, $4, $5, $6, $7,
                  COALESCE((SELECT MAX(position) + 1 FROM tasks WHERE user_id = $8), 0),
-                 $8)
+                 $8, $9)
          RETURNING *",
     )
     .bind(body.title.trim())
@@ -82,6 +82,7 @@ async fn create(
     .bind(body.recurrence)
     .bind(body.reminder_at)
     .bind(user.id)
+    .bind(normalize_tags(body.tags))
     .fetch_one(&st.db)
     .await?;
     Ok(Json(row))
@@ -110,6 +111,7 @@ async fn update(
             reminder_at = CASE WHEN $13 THEN $14 ELSE reminder_at END,
             eisenhower  = CASE WHEN $16 THEN $17 ELSE eisenhower END,
             position    = COALESCE($15, position),
+            tags        = COALESCE($18, tags),
             updated_at  = now()
          WHERE id = $1 AND user_id = $2
          RETURNING *",
@@ -131,6 +133,7 @@ async fn update(
     .bind(body.position)
     .bind(body.eisenhower.is_some())
     .bind(body.eisenhower.flatten())
+    .bind(body.tags.map(normalize_tags))
     .fetch_optional(&st.db)
     .await?
     .ok_or(AppError::NotFound)?;
@@ -194,6 +197,21 @@ async fn delete(
         return Err(AppError::NotFound);
     }
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Teglarni tozalaydi: kichik harf, bo'shliqsiz, takrorsiz, ko'pi bilan 10 ta.
+fn normalize_tags(tags: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in tags {
+        let t = t.trim().to_lowercase().replace(' ', "-");
+        if !t.is_empty() && !out.contains(&t) {
+            out.push(t);
+        }
+        if out.len() >= 10 {
+            break;
+        }
+    }
+    out
 }
 
 /// Oddiy takrorlanish qoidasi bo'yicha keyingi sanani hisoblaydi.

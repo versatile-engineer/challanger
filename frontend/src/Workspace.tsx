@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { Habit, Project, Task, User } from "./types";
+import { parseTask } from "./nlp";
+import type { Habit, Project, Subtask, Task, User } from "./types";
 import { Sidebar, type Selection } from "./components/Sidebar";
 import { TaskItem } from "./components/TaskItem";
 import { TaskDetail } from "./components/TaskDetail";
@@ -11,6 +12,8 @@ import { PomodoroPage } from "./components/PomodoroPage";
 import { CountdownPage } from "./components/CountdownPage";
 import { GroupsPage } from "./components/GroupsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { CommandPalette } from "./components/CommandPalette";
+import { StatsPage } from "./components/StatsPage";
 
 interface Props {
   user: User;
@@ -22,19 +25,22 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [selection, setSelection] = useState<Selection>({ kind: "smart", view: "today" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [quick, setQuick] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Dastlabki yuklash
   useEffect(() => {
-    Promise.all([api.listProjects(), api.listTasks(), api.listHabits()])
-      .then(([p, t, h]) => {
+    Promise.all([api.listProjects(), api.listTasks(), api.listHabits(), api.listSubtasks()])
+      .then(([p, t, h, s]) => {
         setProjects(p);
         setTasks(t);
         setHabits(h);
+        setSubtasks(s);
       })
       .catch((e) => setError(String(e.message ?? e)));
   }, []);
@@ -76,6 +82,8 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
     let list = tasks.filter((t) => showCompleted || !t.completed);
 
+    if (tagFilter) list = list.filter((t) => (t.tags ?? []).includes(tagFilter));
+
     if (selection.kind === "project") {
       list = list.filter((t) => t.project_id === selection.id);
     } else if (selection.kind === "smart" && selection.view === "today") {
@@ -88,7 +96,7 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       );
     }
     return list;
-  }, [tasks, selection, showCompleted]);
+  }, [tasks, selection, showCompleted, tagFilter]);
 
   const counts = useMemo(() => {
     const startOfToday = new Date();
@@ -107,7 +115,42 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     };
   }, [tasks]);
 
+  const subtaskCounts = useMemo(() => {
+    const m: Record<string, { done: number; total: number }> = {};
+    for (const s of subtasks) {
+      const c = m[s.task_id] ?? { done: 0, total: 0 };
+      c.total++;
+      if (s.done) c.done++;
+      m[s.task_id] = c;
+    }
+    return m;
+  }, [subtasks]);
+
+  const selectAndClear = (s: Selection) => {
+    setSelection(s);
+    setSelectedId(null);
+  };
+
+  // "/" tugmasi bilan tez qo'shish maydonini fokuslash
+  const quickRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        quickRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
+  const selectedSubtasks = useMemo(
+    () => subtasks.filter((s) => s.task_id === selectedId),
+    [subtasks, selectedId]
+  );
 
   // ---- Mutatsiyalar ----
   const upsertTask = (t: Task) =>
@@ -121,18 +164,24 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
   const addQuickTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    const title = quick.trim();
-    if (!title) return;
+    const raw = quick.trim();
+    if (!raw) return;
     setQuick("");
-    const defaults: Partial<Task> = {};
+    // Tabiiy tildan muddat/prioritet/teg ajratib olamiz
+    const parsed = parseTask(raw);
+    const defaults: Partial<Task> & { tags?: string[] } = {};
     if (selection.kind === "project") defaults.project_id = selection.id;
-    if (selection.kind === "smart" && selection.view === "today") {
+    if (parsed.priority > 0) defaults.priority = parsed.priority;
+    if (parsed.tags.length) defaults.tags = parsed.tags;
+    if (parsed.due_date) {
+      defaults.due_date = parsed.due_date;
+    } else if (selection.kind === "smart" && selection.view === "today") {
       const d = new Date();
       d.setHours(23, 59, 0, 0);
       defaults.due_date = d.toISOString();
     }
     try {
-      const created = await api.createTask({ title, ...defaults });
+      const created = await api.createTask({ title: parsed.title, ...defaults });
       upsertTask(created);
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -230,6 +279,40 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     }
   };
 
+  // --- Kichik qadamlar (subtasks) ---
+  const addSubtask = async (taskId: string, title: string) => {
+    try {
+      const s = await api.createSubtask(taskId, title);
+      setSubtasks((prev) => [...prev, s]);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+  const toggleSubtask = async (id: string, done: boolean) => {
+    setSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, done } : s)));
+    try {
+      await api.updateSubtask(id, { done });
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+  const renameSubtask = async (id: string, title: string) => {
+    setSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, title } : s)));
+    try {
+      await api.updateSubtask(id, { title });
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+  const removeSubtask = async (id: string) => {
+    setSubtasks((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await api.deleteSubtask(id);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
   // --- Eisenhower: kvadrantni o'rnatish ---
   const setQuadrant = (id: string, q: number) => patchTask(id, { eisenhower: q });
 
@@ -274,6 +357,8 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
         return <CountdownPage />;
       case "groups":
         return <GroupsPage user={user} />;
+      case "stats":
+        return <StatsPage userId={user.id} />;
       case "settings":
         return <SettingsPage user={user} onUserUpdate={onUserUpdate} onLogout={onLogout} />;
     }
@@ -281,6 +366,13 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
   return (
     <div className="app">
+      <CommandPalette
+        tasks={tasks}
+        habits={habits}
+        projects={projects}
+        onSelectTask={setSelectedId}
+        onSelect={selectAndClear}
+      />
       <Sidebar
         projects={projects}
         counts={counts}
@@ -317,11 +409,20 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
           </div>
         )}
 
+        {tagFilter && (
+          <div className="tag-filter-bar">
+            <span>Filtr:</span>
+            <span className="task-tag active">#{tagFilter}</span>
+            <button className="tag-filter-clear" onClick={() => setTagFilter(null)}>× tozalash</button>
+          </div>
+        )}
+
         <form className="quick-add" onSubmit={addQuickTask}>
           <input
+            ref={quickRef}
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
-            placeholder="+ Vazifa qo'shish… (Enter)"
+            placeholder="+ Vazifa… masalan: ertaga soat 15:00 hisobot !2 #ish"
           />
         </form>
 
@@ -336,6 +437,8 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
                 selected={t.id === selectedId}
                 onSelect={() => setSelectedId(t.id)}
                 onComplete={() => completeTask(t.id)}
+                onTagClick={(tag) => setTagFilter(tag)}
+                subtaskCount={subtaskCounts[t.id]}
               />
             ))
           )}
@@ -347,9 +450,14 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
         <TaskDetail
           task={selectedTask}
           projects={projects}
+          subtasks={selectedSubtasks}
           onChange={(patch) => patchTask(selectedTask.id, patch)}
           onDelete={() => removeTask(selectedTask.id)}
           onClose={() => setSelectedId(null)}
+          onAddSubtask={(title) => addSubtask(selectedTask.id, title)}
+          onToggleSubtask={toggleSubtask}
+          onRenameSubtask={renameSubtask}
+          onDeleteSubtask={removeSubtask}
         />
       )}
     </div>

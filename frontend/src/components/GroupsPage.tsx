@@ -17,6 +17,18 @@ function weekDaysSoFar(): string[] {
   return out;
 }
 
+/// O'tgan haftaning to'liq kunlari (dushanba–yakshanba)
+function prevWeekDays(): string[] {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const lastMonday = new Date(thisMonday.getTime() - 7 * 86400000);
+  const out: string[] = [];
+  for (let i = 0; i < 7; i++) out.push(ymd(new Date(lastMonday.getTime() + i * 86400000)));
+  return out;
+}
+
 export function GroupsPage({ user }: { user: User }) {
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -152,14 +164,17 @@ interface DetailProps {
 }
 
 function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, setError, error }: DetailProps) {
-  const [tab, setTab] = useState<"habits" | "stats" | "members">("habits");
+  const [tab, setTab] = useState<"habits" | "tasks" | "stats" | "activity" | "members">("habits");
   const [habitName, setHabitName] = useState("");
   const [memberName, setMemberName] = useState("");
+  const [taskName, setTaskName] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
   const isOwner = detail.owner_id === user.id;
   const today = ymd(new Date());
   const week = weekDaysSoFar();
+  const nameOf = (uid: string | null) =>
+    uid ? detail.members.find((m) => m.user_id === uid)?.username ?? "?" : "?";
 
   const addHabit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,6 +200,45 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
   const deleteHabit = async (hid: string) => {
     try {
       await api.deleteGroupHabit(detail.id, hid);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const react = async (hid: string, emoji: string) => {
+    try {
+      await api.reactGroupHabit(hid, emoji);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const addTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskName.trim()) return;
+    try {
+      await api.createGroupTask(detail.id, taskName.trim());
+      setTaskName("");
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const toggleTask = async (tid: string) => {
+    try {
+      await api.toggleGroupTask(tid);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const deleteTask = async (tid: string) => {
+    try {
+      await api.deleteGroupTask(tid);
       onChanged();
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -261,6 +315,18 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
   const rate = possible ? Math.round((totalDone / possible) * 100) : 0;
   const maxCount = leaderboard[0]?.count || 1;
 
+  // O'tgan hafta bilan solishtirish
+  const prevWeek = prevWeekDays();
+  const prevTotal = detail.members.reduce((sum, m) => {
+    let c = 0;
+    for (const h of detail.habits) {
+      const days = new Set(h.entries[m.user_id] ?? []);
+      for (const d of prevWeek) if (days.has(d)) c++;
+    }
+    return sum + c;
+  }, 0);
+  const delta = totalDone - prevTotal;
+
   return (
     <div className="page group-detail">
       <div className="page-head">
@@ -278,7 +344,11 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
 
       <div className="seg gd-tabs">
         <button className={tab === "habits" ? "active" : ""} onClick={() => setTab("habits")}>Odatlar</button>
+        <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
+          Vazifalar ({detail.tasks.filter((t) => !t.done).length})
+        </button>
         <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Statistika</button>
+        <button className={tab === "activity" ? "active" : ""} onClick={() => setTab("activity")}>Faoliyat</button>
         <button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
           A'zolar ({detail.members.length})
         </button>
@@ -336,9 +406,77 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                     {mine ? "✓ Bajarildi" : "Men bajardim"}
                   </button>
                 </div>
+                <div className="gh-reactions">
+                  {["👍", "🔥", "👏", "💪"].map((emoji) => {
+                    const count = h.reactions?.[emoji] ?? 0;
+                    const active = (h.my_reactions ?? []).includes(emoji);
+                    return (
+                      <button
+                        key={emoji}
+                        className={`reaction ${active ? "active" : ""}`}
+                        onClick={() => react(h.id, emoji)}
+                        title="Reaksiya"
+                      >
+                        {emoji}
+                        {count > 0 && <span className="reaction-count">{count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ---- Umumiy vazifalar ---- */}
+      {tab === "tasks" && (
+        <div className="gd-section">
+          <form className="habit-form-top gd-add" onSubmit={addTask}>
+            <input
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
+              placeholder="+ Umumiy vazifa qo'shish"
+            />
+            <button type="submit">Qo'shish</button>
+          </form>
+          {detail.tasks.length === 0 && <div className="empty">Hali umumiy vazifa yo'q ✅</div>}
+          <div className="gtask-list">
+            {detail.tasks.map((t) => (
+              <div key={t.id} className={`gtask-row ${t.done ? "done" : ""}`}>
+                <button className="gtask-check" onClick={() => toggleTask(t.id)}>
+                  {t.done ? "✓" : ""}
+                </button>
+                <span className="gtask-title">{t.title}</span>
+                {t.done && t.done_by && (
+                  <span className="gtask-by">— {nameOf(t.done_by)}</span>
+                )}
+                <button className="gtask-del" onClick={() => deleteTask(t.id)} title="O'chirish">×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Faoliyat (bildirishnoma tasmasi) ---- */}
+      {tab === "activity" && (
+        <div className="gd-section">
+          {detail.activity.length === 0 && <div className="empty">Hali faoliyat yo'q 🔔</div>}
+          <div className="activity-feed">
+            {detail.activity.map((a) => (
+              <div key={a.id} className="activity-row">
+                <span className="activity-text">{a.text}</span>
+                <span className="activity-time">
+                  {new Date(a.created_at).toLocaleString("uz", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -358,6 +496,18 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
               <div className="stat-num">{detail.habits.length}</div>
               <div className="stat-label">Jamoaviy odatlar</div>
             </div>
+          </div>
+
+          <div className="week-summary">
+            <span>📈 Haftalik xulosa:</span>
+            <span className="ws-cur">bu hafta {totalDone}</span>
+            <span className="ws-prev">o'tgan hafta {prevTotal}</span>
+            {delta !== 0 && (
+              <span className={`ws-delta ${delta > 0 ? "up" : "down"}`}>
+                {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
+              </span>
+            )}
+            {delta === 0 && <span className="ws-delta">= barobar</span>}
           </div>
 
           <h3 className="stat-h">🏆 Reyting (shu hafta)</h3>

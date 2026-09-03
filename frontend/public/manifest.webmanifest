@@ -1,0 +1,14 @@
+{
+  "name": "Challanger — Vazifalar",
+  "short_name": "Challanger",
+  "description": "Vazifalar, odatlar, pomodoro va jamoa — hammasi bir joyda.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f1120",
+  "theme_color": "#6366f1",
+  "lang": "uz",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

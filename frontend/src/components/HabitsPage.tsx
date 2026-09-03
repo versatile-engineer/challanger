@@ -51,6 +51,42 @@ function streak(days: Set<string>): number {
   return s;
 }
 
+/// Eng uzun ketma-ket kunlar seriyasi (butun tarix bo'yicha).
+function longestStreak(days: string[]): number {
+  if (days.length === 0) return 0;
+  const sorted = [...days].sort();
+  let best = 1;
+  let cur = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + "T00:00:00").getTime();
+    const now = new Date(sorted[i] + "T00:00:00").getTime();
+    if (now - prev === 86400000) {
+      cur++;
+      best = Math.max(best, cur);
+    } else if (now !== prev) {
+      cur = 1;
+    }
+  }
+  return best;
+}
+
+/// Oxirgi N kun uchun heatmap katakchalari (eng eskisidan bugungacha).
+function heatmapDays(set: Set<string>, n = 91): { key: string; done: boolean; future: boolean }[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Boshlanishni dushanbaga tekislaymiz (ustunlar to'liq haftalar bo'lishi uchun)
+  const start = new Date(today.getTime() - (n - 1) * 86400000);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const out: { key: string; done: boolean; future: boolean }[] = [];
+  const end = new Date(today.getTime() + ((7 - ((today.getDay() + 6) % 7) - 1) * 86400000));
+  for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
+    const d = new Date(t);
+    const key = ymd(d);
+    out.push({ key, done: set.has(key), future: d.getTime() > today.getTime() });
+  }
+  return out;
+}
+
 function weekCount(days: Set<string>): number {
   const now = new Date();
   const monday = new Date(now);
@@ -224,6 +260,7 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
 
 export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
   const todayKey = ymd(new Date());
+  const [statsFor, setStatsFor] = useState<string | null>(null);
 
   return (
     <div className="page habits-page">
@@ -254,6 +291,13 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
                     {wc}/{h.target_per_week}
                   </span>
                 )}
+                <button
+                  className={`habit-stats-btn ${statsFor === h.id ? "active" : ""}`}
+                  title="Statistika"
+                  onClick={() => setStatsFor((v) => (v === h.id ? null : h.id))}
+                >
+                  📊
+                </button>
                 <button className="habit-del" title="O'chirish" onClick={() => onDelete(h.id)}>×</button>
               </div>
 
@@ -294,6 +338,44 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
                   );
                 })}
               </div>
+
+              {statsFor === h.id && (
+                <div className="habit-stats">
+                  <div className="habit-stats-row">
+                    <div className="hs-tile">
+                      <div className="hs-num">🔥 {st}</div>
+                      <div className="hs-lbl">Joriy streak</div>
+                    </div>
+                    <div className="hs-tile">
+                      <div className="hs-num">🏆 {longestStreak(h.days)}</div>
+                      <div className="hs-lbl">Eng uzun streak</div>
+                    </div>
+                    <div className="hs-tile">
+                      <div className="hs-num">✅ {h.days.length}</div>
+                      <div className="hs-lbl">Jami kun</div>
+                    </div>
+                  </div>
+                  <div className="heatmap" title="Oxirgi ~3 oy">
+                    {(() => {
+                      const cells = heatmapDays(set);
+                      const weeks: typeof cells[] = [];
+                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                      return weeks.map((wk, wi) => (
+                        <div key={wi} className="heat-col">
+                          {wk.map((c) => (
+                            <span
+                              key={c.key}
+                              className={`heat-cell ${c.done ? "done" : ""} ${c.future ? "future" : ""}`}
+                              style={c.done ? { background: h.color } : undefined}
+                              title={c.key}
+                            />
+                          ))}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

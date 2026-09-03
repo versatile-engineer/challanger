@@ -48,6 +48,27 @@ struct GroupHabitInfo {
     habit: GroupHabitRow,
     /// user_id -> bajarilgan kunlar (oxirgi 90 kun)
     entries: HashMap<Uuid, Vec<String>>,
+    /// emoji -> reaksiya bergan foydalanuvchilar soni
+    reactions: HashMap<String, i64>,
+    /// joriy foydalanuvchi bosgan emoji'lar
+    my_reactions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct GroupTaskInfo {
+    id: Uuid,
+    title: String,
+    done: bool,
+    created_by: Option<Uuid>,
+    done_by: Option<Uuid>,
+    created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ActivityInfo {
+    id: Uuid,
+    text: String,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,6 +79,8 @@ struct GroupDetail {
     owner_id: Uuid,
     members: Vec<MemberInfo>,
     habits: Vec<GroupHabitInfo>,
+    tasks: Vec<GroupTaskInfo>,
+    activity: Vec<ActivityInfo>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +114,16 @@ struct ToggleBody {
     day: NaiveDate,
 }
 
+#[derive(Debug, Deserialize)]
+struct CreateGroupTask {
+    title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReactBody {
+    emoji: String,
+}
+
 fn default_color() -> String {
     "#10b981".into()
 }
@@ -120,6 +153,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::delete(delete_group_habit),
         )
         .route("/group-habits/:id/toggle", post(toggle_group_habit))
+        .route("/group-habits/:id/react", post(react_group_habit))
+        .route("/groups/:id/tasks", post(create_group_task))
+        .route("/group-tasks/:id/toggle", post(toggle_group_task))
+        .route("/group-tasks/:id", axum::routing::delete(delete_group_task))
 }
 
 // ---------- Yordamchilar ----------
@@ -143,6 +180,25 @@ async fn require_owner(st: &AppState, group_id: Uuid, user_id: Uuid) -> AppResul
 
 fn invite_code() -> String {
     Uuid::new_v4().simple().to_string()[..8].to_uppercase()
+}
+
+/// Guruh faoliyat tasmasiga yozuv qo'shadi (xatolarni jimgina yutadi).
+async fn log_activity(st: &AppState, group_id: Uuid, text: impl Into<String>) {
+    let _ = sqlx::query("INSERT INTO group_activity (group_id, text) VALUES ($1, $2)")
+        .bind(group_id)
+        .bind(text.into())
+        .execute(&st.db)
+        .await;
+}
+
+async fn username_of(st: &AppState, user_id: Uuid) -> String {
+    sqlx::query_scalar::<_, String>("SELECT username FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&st.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "kimdir".into())
 }
 
 // ---------- Handlerlar ----------
@@ -241,6 +297,17 @@ async fn get_group(
     .fetch_all(&st.db)
     .await?;
 
+    // Reaksiyalar (barcha odatlar bo'yicha bitta so'rovda)
+    let reactions: Vec<(Uuid, String, Uuid)> = sqlx::query_as(
+        "SELECT r.group_habit_id, r.emoji, r.user_id
+         FROM group_habit_reactions r
+         JOIN group_habits h ON h.id = r.group_habit_id
+         WHERE h.group_id = $1",
+    )
+    .bind(id)
+    .fetch_all(&st.db)
+    .await?;
+
     let habits = habit_rows
         .into_iter()
         .map(|h| {
@@ -250,9 +317,40 @@ async fn get_group(
                     map.entry(*uid).or_default().push(day.to_string());
                 }
             }
-            GroupHabitInfo { habit: h, entries: map }
+            let mut rmap: HashMap<String, i64> = HashMap::new();
+            let mut mine: Vec<String> = Vec::new();
+            for (hid, emoji, uid) in reactions.iter() {
+                if *hid == h.id {
+                    *rmap.entry(emoji.clone()).or_default() += 1;
+                    if *uid == user.id {
+                        mine.push(emoji.clone());
+                    }
+                }
+            }
+            GroupHabitInfo {
+                habit: h,
+                entries: map,
+                reactions: rmap,
+                my_reactions: mine,
+            }
         })
         .collect();
+
+    let tasks = sqlx::query_as::<_, GroupTaskInfo>(
+        "SELECT id, title, done, created_by, done_by, created_at
+         FROM group_tasks WHERE group_id = $1 ORDER BY done, created_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&st.db)
+    .await?;
+
+    let activity = sqlx::query_as::<_, ActivityInfo>(
+        "SELECT id, text, created_at FROM group_activity
+         WHERE group_id = $1 ORDER BY created_at DESC LIMIT 30",
+    )
+    .bind(id)
+    .fetch_all(&st.db)
+    .await?;
 
     Ok(Json(GroupDetail {
         id,
@@ -261,6 +359,8 @@ async fn get_group(
         owner_id,
         members,
         habits,
+        tasks,
+        activity,
     }))
 }
 
@@ -279,7 +379,7 @@ async fn add_member(
         .await?;
     let target = target.ok_or_else(|| AppError::BadRequest("bunday foydalanuvchi topilmadi".into()))?;
 
-    sqlx::query(
+    let res = sqlx::query(
         "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
          ON CONFLICT (group_id, user_id) DO NOTHING",
     )
@@ -287,6 +387,9 @@ async fn add_member(
     .bind(target)
     .execute(&st.db)
     .await?;
+    if res.rows_affected() > 0 {
+        log_activity(&st, id, format!("➕ {username} guruhga qo'shildi")).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -342,7 +445,7 @@ async fn join_group(
         .await?;
     let group_id = group_id.ok_or_else(|| AppError::BadRequest("taklif kodi noto'g'ri".into()))?;
 
-    sqlx::query(
+    let res = sqlx::query(
         "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
          ON CONFLICT (group_id, user_id) DO NOTHING",
     )
@@ -350,6 +453,10 @@ async fn join_group(
     .bind(user.id)
     .execute(&st.db)
     .await?;
+    if res.rows_affected() > 0 {
+        let uname = username_of(&st, user.id).await;
+        log_activity(&st, group_id, format!("➕ {uname} guruhga qo'shildi")).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true, "group_id": group_id })))
 }
 
@@ -408,7 +515,142 @@ async fn create_group_habit(
     .bind(body.target_per_week.clamp(1, 7))
     .fetch_one(&st.db)
     .await?;
+    let uname = username_of(&st, user.id).await;
+    log_activity(&st, id, format!("🔥 {uname} yangi odat qo'shdi: {}", row.name)).await;
     Ok(Json(row))
+}
+
+// ---------- Reaksiyalar ----------
+
+/// Jamoaviy odatga emoji reaksiyasini almashtiradi (faqat a'zolar).
+async fn react_group_habit(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(hid): Path<Uuid>,
+    Json(body): Json<ReactBody>,
+) -> AppResult<Json<serde_json::Value>> {
+    let group_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT gh.group_id FROM group_habits gh
+         JOIN group_members gm ON gm.group_id = gh.group_id AND gm.user_id = $2
+         WHERE gh.id = $1",
+    )
+    .bind(hid)
+    .bind(user.id)
+    .fetch_optional(&st.db)
+    .await?;
+    if group_id.is_none() {
+        return Err(AppError::NotFound);
+    }
+    let emoji = body.emoji.chars().take(8).collect::<String>();
+    if emoji.is_empty() {
+        return Err(AppError::BadRequest("emoji bo'sh".into()));
+    }
+
+    let deleted = sqlx::query(
+        "DELETE FROM group_habit_reactions WHERE group_habit_id = $1 AND user_id = $2 AND emoji = $3",
+    )
+    .bind(hid)
+    .bind(user.id)
+    .bind(&emoji)
+    .execute(&st.db)
+    .await?;
+
+    let active = if deleted.rows_affected() == 0 {
+        sqlx::query(
+            "INSERT INTO group_habit_reactions (group_habit_id, user_id, emoji) VALUES ($1, $2, $3)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(hid)
+        .bind(user.id)
+        .bind(&emoji)
+        .execute(&st.db)
+        .await?;
+        true
+    } else {
+        false
+    };
+    Ok(Json(serde_json::json!({ "emoji": emoji, "active": active })))
+}
+
+// ---------- Umumiy vazifalar ----------
+
+async fn create_group_task(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<CreateGroupTask>,
+) -> AppResult<Json<GroupTaskInfo>> {
+    require_member(&st, id, user.id).await?;
+    if body.title.trim().is_empty() {
+        return Err(AppError::BadRequest("vazifa bo'sh bo'lishi mumkin emas".into()));
+    }
+    let row = sqlx::query_as::<_, GroupTaskInfo>(
+        "INSERT INTO group_tasks (group_id, title, created_by) VALUES ($1, $2, $3)
+         RETURNING id, title, done, created_by, done_by, created_at",
+    )
+    .bind(id)
+    .bind(body.title.trim())
+    .bind(user.id)
+    .fetch_one(&st.db)
+    .await?;
+    Ok(Json(row))
+}
+
+/// Umumiy vazifa holatini almashtiradi (faqat a'zolar).
+async fn toggle_group_task(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(tid): Path<Uuid>,
+) -> AppResult<Json<GroupTaskInfo>> {
+    // Vazifa qaysi guruhda va foydalanuvchi a'zomi?
+    let group_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT gt.group_id FROM group_tasks gt
+         JOIN group_members gm ON gm.group_id = gt.group_id AND gm.user_id = $2
+         WHERE gt.id = $1",
+    )
+    .bind(tid)
+    .bind(user.id)
+    .fetch_optional(&st.db)
+    .await?;
+    let group_id = group_id.ok_or(AppError::NotFound)?;
+
+    let row = sqlx::query_as::<_, GroupTaskInfo>(
+        "UPDATE group_tasks SET
+            done = NOT done,
+            done_by = CASE WHEN NOT done THEN $2 ELSE NULL END
+         WHERE id = $1
+         RETURNING id, title, done, created_by, done_by, created_at",
+    )
+    .bind(tid)
+    .bind(user.id)
+    .fetch_one(&st.db)
+    .await?;
+
+    if row.done {
+        let uname = username_of(&st, user.id).await;
+        log_activity(&st, group_id, format!("✅ {uname} bajardi: {}", row.title)).await;
+    }
+    Ok(Json(row))
+}
+
+async fn delete_group_task(
+    State(st): State<AppState>,
+    user: AuthUser,
+    Path(tid): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let res = sqlx::query(
+        "DELETE FROM group_tasks gt
+         USING group_members gm
+         WHERE gt.id = $1 AND gm.group_id = gt.group_id AND gm.user_id = $2",
+    )
+    .bind(tid)
+    .bind(user.id)
+    .execute(&st.db)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 async fn delete_group_habit(

@@ -13,6 +13,15 @@ export interface Project {
   created_at: string;
 }
 
+export interface Subtask {
+  id: string;
+  task_id: string;
+  title: string;
+  done: boolean;
+  position: number;
+  created_at: string;
+}
+
 export type Recurrence = "daily" | "weekly" | "monthly" | "yearly" | null;
 
 export interface Task {
@@ -28,6 +37,7 @@ export interface Task {
   reminder_at: string | null;
   eisenhower: number | null; // 1..4 kvadrant
   position: number;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +83,23 @@ export interface GroupHabit {
   target_per_week: number;
   created_at: string;
   entries: Record<string, string[]>; // user_id -> bajarilgan kunlar (ISO)
+  reactions: Record<string, number>; // emoji -> soni
+  my_reactions: string[]; // joriy foydalanuvchi bosgan emoji'lar
+}
+
+export interface GroupTask {
+  id: string;
+  title: string;
+  done: boolean;
+  created_by: string | null;
+  done_by: string | null;
+  created_at: string;
+}
+
+export interface GroupActivity {
+  id: string;
+  text: string;
+  created_at: string;
 }
 
 export interface GroupDetail {
@@ -82,6 +109,8 @@ export interface GroupDetail {
   owner_id: string;
   members: GroupMember[];
   habits: GroupHabit[];
+  tasks: GroupTask[];
+  activity: GroupActivity[];
 }
 
 export const PRIORITY_LABELS: Record<number, string> = {

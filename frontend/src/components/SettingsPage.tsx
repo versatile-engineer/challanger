@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../api";
 import type { User } from "../types";
 import { getTheme, setTheme, type Theme } from "../theme";
@@ -33,8 +33,98 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
     "Notification" in window ? Notification.permission : "unsupported"
   );
 
+  // --- Ma'lumot eksport/import ---
+  const [dataMsg, setDataMsg] = useState<Msg>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
   // --- Hisobni o'chirish ---
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const exportData = async () => {
+    setDataMsg(null);
+    setBusy(true);
+    try {
+      const [projects, tasks, habits, subtasks] = await Promise.all([
+        api.listProjects(),
+        api.listTasks({}),
+        api.listHabits(),
+        api.listSubtasks(),
+      ]);
+      const dump = { version: 1, exported_at: new Date().toISOString(), projects, tasks, habits, subtasks };
+      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `challanger-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDataMsg({ kind: "ok", text: "Ma'lumotlar yuklab olindi ✓" });
+    } catch (err: any) {
+      setDataMsg({ kind: "err", text: String(err.message ?? err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importData = async (file: File) => {
+    setDataMsg(null);
+    setBusy(true);
+    try {
+      const dump = JSON.parse(await file.text());
+      // Loyihalar — eski id -> yangi id
+      const projMap = new Map<string, string>();
+      for (const p of dump.projects ?? []) {
+        const created = await api.createProject({ name: p.name, color: p.color });
+        projMap.set(p.id, created.id);
+      }
+      // Vazifalar — eski id -> yangi id
+      const taskMap = new Map<string, string>();
+      for (const t of dump.tasks ?? []) {
+        const created = await api.createTask({
+          title: t.title,
+          notes: t.notes ?? "",
+          due_date: t.due_date ?? null,
+          priority: t.priority ?? 0,
+          recurrence: t.recurrence ?? null,
+          reminder_at: t.reminder_at ?? null,
+          project_id: t.project_id ? projMap.get(t.project_id) ?? null : null,
+          tags: t.tags ?? [],
+        } as any);
+        taskMap.set(t.id, created.id);
+        if (t.completed || t.eisenhower != null) {
+          await api.updateTask(created.id, {
+            ...(t.completed ? { completed: true } : {}),
+            ...(t.eisenhower != null ? { eisenhower: t.eisenhower } : {}),
+          });
+        }
+      }
+      // Kichik qadamlar
+      for (const s of dump.subtasks ?? []) {
+        const newTaskId = taskMap.get(s.task_id);
+        if (!newTaskId) continue;
+        const created = await api.createSubtask(newTaskId, s.title);
+        if (s.done) await api.updateSubtask(created.id, { done: true });
+      }
+      // Odatlar
+      for (const h of dump.habits ?? []) {
+        await api.createHabit({
+          name: h.name,
+          color: h.color,
+          frequency: h.frequency,
+          target_per_week: h.target_per_week,
+          duration_days: h.duration_days ?? undefined,
+          end_date: h.end_date ?? undefined,
+        });
+      }
+      setDataMsg({ kind: "ok", text: "Import tugadi ✓ — sahifani yangilang" });
+    } catch (err: any) {
+      setDataMsg({ kind: "err", text: `Import xatosi: ${String(err.message ?? err)}` });
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const profileChanged = username !== user.username || email !== user.email;
 
@@ -200,6 +290,36 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             </button>
           </div>
         )}
+      </section>
+
+      {/* Ma'lumotlar */}
+      <section className="card">
+        <h3>Ma'lumotlar (zaxira)</h3>
+        {dataMsg && <div className={`settings-msg ${dataMsg.kind}`}>{dataMsg.text}</div>}
+        <div className="settings-inline">
+          <span className="settings-note">
+            Barcha vazifa, loyiha, odat va qadamlarni JSON faylga yuklab oling yoki qayta tiklang.
+          </span>
+          <div className="confirm-row">
+            <button className="btn-secondary" onClick={exportData} disabled={busy}>
+              ⬇ Eksport
+            </button>
+            <button className="btn-secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
+              ⬆ Import
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importData(f);
+              }}
+            />
+          </div>
+        </div>
+        {busy && <p className="settings-note">⏳ Bajarilmoqda…</p>}
       </section>
 
       {/* Hisob */}
