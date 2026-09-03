@@ -3,15 +3,17 @@
 # ─────────────────────────────────────────────
 # 1-bosqich: Frontend (Vite) — statik `dist` yasaydi
 # ─────────────────────────────────────────────
-FROM node:20-slim AS frontend
+FROM node:22-slim AS frontend
 WORKDIR /app/frontend
 
-# pnpm'ni corepack orqali yoqamiz
-RUN corepack enable
+# pnpm'ni corepack orqali yoqamiz (lockfile bilan mos versiyani qadaymiz)
+RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
 # Avval faqat manifestlarni ko'chirib, paketlarni keshlaymiz
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# pnpm 10+ postinstall skriptlarni bloklaydi; esbuild binari optional-dep orqali
+# keladi, lekin ignored-builds xatosi buildни to'xtatmasin uchun ruxsat beramiz
+RUN pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
 # Endi manba kodini qurishimiz
 COPY frontend/ ./
