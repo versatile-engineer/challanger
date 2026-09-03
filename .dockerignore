@@ -1,0 +1,22 @@
+# Rust build artefaktlari
+target
+
+# Frontend
+frontend/node_modules
+frontend/dist
+
+# Mahalliy baza va muhit
+.pg
+.direnv
+.env
+*.log
+
+# Git va hujjatlar
+.git
+.gitignore
+*.md
+
+# Nix
+flake.nix
+flake.lock
+.envrc

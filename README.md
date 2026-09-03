@@ -79,6 +79,26 @@ scripts/pg.sh reset     # o'chirib qayta yaratish
 
 Migratsiyalar backend ishga tushganda avtomatik qo'llanadi (`migrations/`).
 
+## Docker bilan deploy (prod)
+
+Butun stek (PostgreSQL + backend + frontend) bitta `docker compose` bilan ko'tariladi.
+Frontend qurilgach, backend uni bir xil manzildan (`/`) beradi — alohida nginx kerak emas.
+
+```bash
+cp .env.docker.example .env      # JWT_SECRET va (ixtiyoriy) TELEGRAM_BOT_TOKEN ni to'ldiring
+docker compose up -d --build
+```
+
+- Ilova: http://localhost:3000
+- Migratsiyalar konteyner ishga tushganda avtomatik qo'llanadi.
+- Ma'lumotlar `pgdata` docker volume'ida saqlanadi (qayta ishga tushirishda yo'qolmaydi).
+
+Ishlab chiqarishda:
+- `JWT_SECRET` ni albatta o'zgartiring: `openssl rand -hex 32`
+- Reverse-proxy (nginx/Caddy) orqali HTTPS qo'shing — `app` konteyner 3000-portda turadi.
+
+Fayllar: `Dockerfile` (3 bosqichli: frontend → backend → runtime), `docker-compose.yml`, `.dockerignore`.
+
 ## Telegram bot (ixtiyoriy)
 
 Bot vazifa eslatmalarini Telegram'ga xabar sifatida yuboradi. Sozlash uch qadam:

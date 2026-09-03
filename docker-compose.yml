@@ -1,0 +1,44 @@
+# Challanger — prod deploy: PostgreSQL + ilova (backend + frontend bitta konteynerda)
+#
+# Ishga tushirish:
+#   1. `.env` faylini tayyorlang (namuna: .env.docker.example)
+#   2. docker compose up -d --build
+#
+# Ilova: http://localhost:3000
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-challanger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-challanger}
+      POSTGRES_DB: ${POSTGRES_DB:-challanger}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-challanger}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Baza — konteyner ichida `db` hostnomi orqali
+      DATABASE_URL: postgres://${POSTGRES_USER:-challanger}:${POSTGRES_PASSWORD:-challanger}@db:5432/${POSTGRES_DB:-challanger}
+      BIND_ADDR: 0.0.0.0:3000
+      # ⚠️ Prodda albatta o'zgartiring
+      JWT_SECRET: ${JWT_SECRET:-CHANGE-ME-in-production}
+      # Ixtiyoriy — bo'sh bo'lsa bot o'chiq
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      RUST_LOG: challanger=info,tower_http=warn,info
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  pgdata:

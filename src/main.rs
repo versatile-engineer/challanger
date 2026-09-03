@@ -11,6 +11,7 @@ use axum::Router;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::telegram::TelegramBot;
@@ -83,8 +84,16 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::subtasks::router())
         .merge(routes::telegram::router());
 
+    // Qurilgan frontend'ni (Vite `dist`) shu serverdan beramiz.
+    // SPA bo'lgani uchun topilmagan yo'llar `index.html`ga yo'naltiriladi.
+    // Dev'da bu papka bo'lmasligi mumkin — u holda oddiygina 404 qaytadi (Vite proxy ishlatiladi).
+    let frontend_dir = std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "frontend/dist".into());
+    let index_html = format!("{frontend_dir}/index.html");
+    let static_service = ServeDir::new(&frontend_dir).not_found_service(ServeFile::new(index_html));
+
     let app = Router::new()
         .nest("/api", api)
+        .fallback_service(static_service)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
