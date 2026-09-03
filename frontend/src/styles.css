@@ -80,6 +80,26 @@
   --viz-axis: #383835;
 }
 
+/* Gruvbox (iliq, qorong'i) — https://github.com/morhetz/gruvbox */
+:root[data-theme="gruvbox"] {
+  --bg: #282828;          /* bg0 */
+  --panel: #32302f;       /* bg0_s */
+  --border: #504945;      /* bg2 */
+  --text: #ebdbb2;        /* fg1 */
+  --muted: #a89984;       /* fg4 */
+  --accent: #fabd2f;      /* sariq */
+  --accent2: #fe8019;     /* to'q sariq */
+  --accent-soft: #45372a; /* iliq qorong'i */
+  --danger: #fb4934;      /* qizil */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --viz-s1: #83a598;      /* ko'k */
+  --viz-s2: #b8bb26;      /* yashil */
+  --viz-remaining: #3c3836;
+  --viz-grid: #3c3836;
+  --viz-axis: #504945;
+}
+
 * { box-sizing: border-box; }
 
 body {

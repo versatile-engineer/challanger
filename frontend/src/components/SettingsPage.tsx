@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { User } from "../types";
 import { getTheme, setTheme, type Theme } from "../theme";
@@ -32,6 +32,43 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
   const [notif, setNotif] = useState<NotificationPermission | "unsupported">(
     "Notification" in window ? Notification.permission : "unsupported"
   );
+
+  // --- Telegram ---
+  const [tg, setTg] = useState<{ configured: boolean; connected: boolean } | null>(null);
+  const [tgLink, setTgLink] = useState<string | null>(null);
+  const [tgBusy, setTgBusy] = useState(false);
+
+  useEffect(() => {
+    api.telegramStatus().then(setTg).catch(() => setTg(null));
+  }, []);
+
+  const connectTelegram = async () => {
+    setTgBusy(true);
+    try {
+      const res = await api.telegramLink();
+      setTgLink(res.deep_link);
+      window.open(res.deep_link, "_blank");
+      // Bir necha soniyadan so'ng holatni qayta tekshiramiz (bot ulagan bo'lsa)
+      setTimeout(() => api.telegramStatus().then(setTg).catch(() => {}), 4000);
+    } catch {
+      /* xato — jim o'tamiz */
+    } finally {
+      setTgBusy(false);
+    }
+  };
+
+  const refreshTelegram = () => api.telegramStatus().then(setTg).catch(() => {});
+
+  const disconnectTelegram = async () => {
+    setTgBusy(true);
+    try {
+      await api.telegramUnlink();
+      setTgLink(null);
+      setTg((s) => (s ? { ...s, connected: false } : s));
+    } finally {
+      setTgBusy(false);
+    }
+  };
 
   // --- Ma'lumot eksport/import ---
   const [dataMsg, setDataMsg] = useState<Msg>(null);
@@ -258,14 +295,20 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
       <section className="card">
         <h3>Ko'rinish (mavzu)</h3>
         <div className="seg">
-          {(["system", "light", "dark"] as Theme[]).map((t) => (
+          {(["system", "light", "dark", "gruvbox"] as Theme[]).map((t) => (
             <button
               key={t}
               type="button"
               className={theme === t ? "active" : ""}
               onClick={() => chooseTheme(t)}
             >
-              {t === "system" ? "Tizim" : t === "light" ? "Yorug'" : "Qorong'i"}
+              {t === "system"
+                ? "Tizim"
+                : t === "light"
+                ? "Yorug'"
+                : t === "dark"
+                ? "Qorong'i"
+                : "Gruvbox"}
             </button>
           ))}
         </div>
@@ -288,6 +331,58 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             <button className="btn-secondary" onClick={requestNotif} disabled={notif === "denied"}>
               Ruxsat berish
             </button>
+          </div>
+        )}
+      </section>
+
+      {/* Telegram */}
+      <section className="card">
+        <h3>Telegram eslatmalari</h3>
+        {tg === null ? (
+          <p className="settings-note">Yuklanmoqda…</p>
+        ) : !tg.configured ? (
+          <p className="settings-note">
+            Serverda Telegram bot sozlanmagan. Administrator <code>TELEGRAM_BOT_TOKEN</code> ni
+            o'rnatishi kerak.
+          </p>
+        ) : tg.connected ? (
+          <div className="settings-inline">
+            <p className="settings-note">
+              ✅ Telegram ulangan — vazifa eslatmalari botga yuboriladi.
+            </p>
+            <button className="btn-secondary" onClick={disconnectTelegram} disabled={tgBusy}>
+              Uzish
+            </button>
+          </div>
+        ) : (
+          <div className="settings-form">
+            <p className="settings-note">
+              Botga ulaning — belgilangan eslatma vaqtida vazifalaringiz Telegram'ga xabar bo'lib
+              keladi.
+            </p>
+            <div className="settings-inline">
+              <span className="settings-note">
+                Tugmani bosing, bot ochiladi va <b>Start</b> ni bosing.
+              </span>
+              <div className="confirm-row">
+                <button className="btn-primary" onClick={connectTelegram} disabled={tgBusy}>
+                  {tgBusy ? "…" : "Telegram'ni ulash"}
+                </button>
+                <button className="btn-secondary" onClick={refreshTelegram} disabled={tgBusy}>
+                  ⟳ Tekshirish
+                </button>
+              </div>
+            </div>
+            {tgLink && (
+              <small className="settings-note">
+                Ochilmadimi? Havola:{" "}
+                <a href={tgLink} target="_blank" rel="noreferrer">
+                  {tgLink}
+                </a>{" "}
+                <br />
+                Botda Start bosgach, <b>⟳ Tekshirish</b> tugmasini bosing.
+              </small>
+            )}
           </div>
         )}
       </section>

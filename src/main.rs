@@ -2,6 +2,7 @@ mod auth;
 mod error;
 mod models;
 mod routes;
+mod telegram;
 
 use std::sync::Arc;
 
@@ -12,10 +13,13 @@ use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+use crate::telegram::TelegramBot;
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
     pub jwt_secret: Arc<String>,
+    pub telegram: Option<Arc<TelegramBot>>,
 }
 
 #[tokio::main]
@@ -43,9 +47,24 @@ async fn main() -> anyhow::Result<()> {
     let jwt_secret = std::env::var("JWT_SECRET")
         .unwrap_or_else(|_| "dev-secret-o'zgartiring-productionda".into());
 
+    // Telegram bot (ixtiyoriy) — TELEGRAM_BOT_TOKEN berilganda yoqiladi.
+    let telegram = match TelegramBot::from_env(db.clone()).await {
+        Some(bot) => {
+            tracing::info!("🤖 Telegram bot yoqildi: @{}", bot.username());
+            tokio::spawn(bot.clone().run_polling());
+            tokio::spawn(bot.clone().run_reminders());
+            Some(bot)
+        }
+        None => {
+            tracing::info!("Telegram bot o'chirilgan (TELEGRAM_BOT_TOKEN yo'q yoki yaroqsiz)");
+            None
+        }
+    };
+
     let state = AppState {
         db,
         jwt_secret: Arc::new(jwt_secret),
+        telegram,
     };
 
     // Dev uchun CORS ochiq (Vite frontend boshqa portda ishlaydi)
@@ -61,7 +80,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::tasks::router())
         .merge(routes::habits::router())
         .merge(routes::groups::router())
-        .merge(routes::subtasks::router());
+        .merge(routes::subtasks::router())
+        .merge(routes::telegram::router());
 
     let app = Router::new()
         .nest("/api", api)

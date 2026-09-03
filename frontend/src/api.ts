@@ -60,6 +60,15 @@ export const api = {
     req<{ ok: boolean }>("/auth/password", { method: "POST", body: JSON.stringify(data) }),
   deleteAccount: () => req<{ ok: boolean }>("/auth/me", { method: "DELETE" }),
 
+  // --- Telegram ---
+  telegramStatus: () =>
+    req<{ configured: boolean; connected: boolean }>("/telegram/status"),
+  telegramLink: () =>
+    req<{ deep_link: string; bot_username: string; code: string }>("/telegram/link", {
+      method: "POST",
+    }),
+  telegramUnlink: () => req<{ ok: boolean }>("/telegram/unlink", { method: "POST" }),
+
   // --- Loyihalar ---
   listProjects: () => req<Project[]>("/projects"),
   createProject: (data: { name: string; color?: string }) =>

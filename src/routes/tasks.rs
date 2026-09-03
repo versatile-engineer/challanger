@@ -109,6 +109,8 @@ async fn update(
             priority    = COALESCE($10, priority),
             recurrence  = CASE WHEN $11 THEN $12 ELSE recurrence END,
             reminder_at = CASE WHEN $13 THEN $14 ELSE reminder_at END,
+            -- Eslatma vaqti o'zgartirilsa — qayta yuborishga tayyorlaymiz
+            reminder_sent = CASE WHEN $13 THEN false ELSE reminder_sent END,
             eisenhower  = CASE WHEN $16 THEN $17 ELSE eisenhower END,
             position    = COALESCE($15, position),
             tags        = COALESCE($18, tags),
@@ -160,7 +162,7 @@ async fn complete(
             let next = next_occurrence(due, rule);
             let next_reminder = task.reminder_at.map(|r| r + (next - due));
             let row = sqlx::query_as::<_, Task>(
-                "UPDATE tasks SET due_date = $2, reminder_at = $3, updated_at = now()
+                "UPDATE tasks SET due_date = $2, reminder_at = $3, reminder_sent = false, updated_at = now()
                  WHERE id = $1 RETURNING *",
             )
             .bind(id)

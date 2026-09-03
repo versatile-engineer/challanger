@@ -1,11 +1,11 @@
-// Mavzu boshqaruvi: 'system' | 'light' | 'dark'
-export type Theme = "system" | "light" | "dark";
+// Mavzu boshqaruvi: 'system' | 'light' | 'dark' | 'gruvbox'
+export type Theme = "system" | "light" | "dark" | "gruvbox";
 
 const KEY = "challanger_theme";
 
 export function getTheme(): Theme {
   const t = localStorage.getItem(KEY);
-  return t === "light" || t === "dark" ? t : "system";
+  return t === "light" || t === "dark" || t === "gruvbox" ? t : "system";
 }
 
 export function applyTheme(theme: Theme) {
