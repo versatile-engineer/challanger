@@ -185,7 +185,9 @@ export function TaskDetail({
         >
           <option value="">Yo'q</option>
           <option value="daily">Har kuni</option>
+          <option value="weekdays">Ish kunlari (Du–Ju)</option>
           <option value="weekly">Har hafta</option>
+          <option value="biweekly">2 haftada</option>
           <option value="monthly">Har oy</option>
           <option value="yearly">Har yil</option>
         </select>

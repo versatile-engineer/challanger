@@ -95,10 +95,26 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
+/// Drag-and-drop tartiblash uchun: yangi tartibdagi id'lar ketma-ketligi.
+#[derive(Debug, Deserialize)]
+pub struct ReorderTasks {
+    pub ids: Vec<Uuid>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TaskQuery {
     pub project_id: Option<Uuid>,
     pub completed: Option<bool>,
     /// "today" | "upcoming" | "overdue"
     pub view: Option<String>,
+    /// Matn bo'yicha qidiruv (sarlavha + izoh)
+    pub search: Option<String>,
+    /// Bitta teg bo'yicha filtr
+    pub tag: Option<String>,
+    /// Prioritet bo'yicha filtr (0–3)
+    pub priority: Option<i16>,
+    /// Pagination — nechta qaytarish (standart cheklovsiz)
+    pub limit: Option<i64>,
+    /// Pagination — nechtasini o'tkazib yuborish
+    pub offset: Option<i64>,
 }

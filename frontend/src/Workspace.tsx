@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import { useT } from "./i18n";
 import { parseTask } from "./nlp";
 import type { Habit, Project, Subtask, Task, User } from "./types";
 import { Sidebar, type Selection } from "./components/Sidebar";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
+  const t = useT();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -31,7 +33,15 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [quick, setQuick] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<"smart" | "manual">("smart");
   const [error, setError] = useState<string | null>(null);
+  // Drag-and-drop holati
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Undo (o'chirishni 5 soniya kechiktirish)
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Dastlabki yuklash
   useEffect(() => {
@@ -84,6 +94,16 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
     if (tagFilter) list = list.filter((t) => (t.tags ?? []).includes(tagFilter));
 
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          (t.notes ?? "").toLowerCase().includes(q) ||
+          (t.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+      );
+    }
+
     if (selection.kind === "project") {
       list = list.filter((t) => t.project_id === selection.id);
     } else if (selection.kind === "smart" && selection.view === "today") {
@@ -95,8 +115,13 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
         (t) => t.due_date && new Date(t.due_date) >= endOfToday && !t.completed
       );
     }
+
+    // "Qo'lda" rejimda faqat position bo'yicha (drag-and-drop tartibi hokim).
+    if (sortMode === "manual") {
+      list = [...list].sort((a, b) => a.position - b.position);
+    }
     return list;
-  }, [tasks, selection, showCompleted, tagFilter]);
+  }, [tasks, selection, showCompleted, tagFilter, search, sortMode]);
 
   const counts = useMemo(() => {
     const startOfToday = new Date();
@@ -131,20 +156,66 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     setSelectedId(null);
   };
 
-  // "/" tugmasi bilan tez qo'shish maydonini fokuslash
+  // Klaviatura yorliqlari (vazifalar ro'yxatida)
   const quickRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-      if (e.key === "/" && !typing) {
+      if (typing) return;
+      // Faqat vazifalar ko'rinishida navigatsiya ishlaydi
+      if (selection.kind === "page") {
+        if (e.key === "/" && quickRef.current) quickRef.current.focus();
+        return;
+      }
+
+      if (e.key === "/") {
         e.preventDefault();
         quickRef.current?.focus();
+        return;
+      }
+
+      const ids = visible.map((t) => t.id);
+      const cur = selectedId ? ids.indexOf(selectedId) : -1;
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown": {
+          e.preventDefault();
+          const next = cur < 0 ? 0 : Math.min(cur + 1, ids.length - 1);
+          if (ids[next]) setSelectedId(ids[next]);
+          break;
+        }
+        case "k":
+        case "ArrowUp": {
+          e.preventDefault();
+          const prev = cur < 0 ? 0 : Math.max(cur - 1, 0);
+          if (ids[prev]) setSelectedId(ids[prev]);
+          break;
+        }
+        case "c":
+        case "x":
+          if (selectedId) {
+            e.preventDefault();
+            completeTask(selectedId);
+          }
+          break;
+        case "Delete":
+        case "Backspace":
+          if (selectedId) {
+            e.preventDefault();
+            removeTask(selectedId);
+          }
+          break;
+        case "Escape":
+          setSelectedId(null);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, selectedId, selection]);
 
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
   const selectedSubtasks = useMemo(
@@ -206,14 +277,82 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     }
   };
 
-  const removeTask = async (id: string) => {
-    try {
-      await api.deleteTask(id);
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-      if (selectedId === id) setSelectedId(null);
-    } catch (e: any) {
-      setError(String(e.message ?? e));
+  // O'chirish 5 soniyaga kechiktiriladi — shu vaqt ichida "Bekor qilish" mumkin.
+  const removeTask = (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    // Avvalgi kutilayotgan o'chirish bo'lsa — uni darhol serverdan o'chiramiz.
+    flushPendingDelete();
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    setPendingDelete(task);
+    deleteTimer.current = setTimeout(() => {
+      api.deleteTask(id).catch((e) => setError(String(e.message ?? e)));
+      setPendingDelete(null);
+      deleteTimer.current = null;
+    }, 5000);
+  };
+
+  // Kutilayotgan o'chirishni darhol serverga yuborish (kechikmasdan).
+  const flushPendingDelete = () => {
+    if (deleteTimer.current) {
+      clearTimeout(deleteTimer.current);
+      deleteTimer.current = null;
     }
+    if (pendingDelete) {
+      const id = pendingDelete.id;
+      api.deleteTask(id).catch((e) => setError(String(e.message ?? e)));
+      setPendingDelete(null);
+    }
+  };
+
+  const undoDelete = () => {
+    if (deleteTimer.current) {
+      clearTimeout(deleteTimer.current);
+      deleteTimer.current = null;
+    }
+    if (pendingDelete) {
+      upsertTask(pendingDelete);
+      setPendingDelete(null);
+    }
+  };
+
+  // Ctrl/Cmd+Z bilan oxirgi o'chirishni qaytarish
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && pendingDelete) {
+        e.preventDefault();
+        undoDelete();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingDelete]);
+
+  // --- Drag-and-drop: ko'rinayotgan ro'yxatni qayta tartiblash ---
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      setDragOverId(null);
+      return;
+    }
+    const ids = visible.map((t) => t.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const newIds = [...ids];
+    const [moved] = newIds.splice(from, 1);
+    newIds.splice(to, 0, moved);
+    // Pozitsiyalarni yangilaymiz (optimistik) va serverga saqlaymiz.
+    setTasks((prev) =>
+      prev.map((t) => {
+        const idx = newIds.indexOf(t.id);
+        return idx >= 0 ? { ...t, position: idx } : t;
+      })
+    );
+    setDragId(null);
+    setDragOverId(null);
+    api.reorderTasks(newIds).catch((e) => setError(String(e.message ?? e)));
   };
 
   const addProject = async (name: string) => {
@@ -333,12 +472,12 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
   const heading =
     selection.kind === "project"
-      ? projects.find((p) => p.id === selection.id)?.name ?? "Loyiha"
+      ? projects.find((p) => p.id === selection.id)?.name ?? t("main.project")
       : selection.kind === "smart" && selection.view === "today"
-      ? "Bugun"
+      ? t("main.today")
       : selection.kind === "smart" && selection.view === "upcoming"
-      ? "Kelgusi"
-      : "Barcha vazifalar";
+      ? t("main.upcoming")
+      : t("main.all");
 
   const renderPage = () => {
     if (selection.kind !== "page") return null;
@@ -393,13 +532,27 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       <main className="main">
         <header className="main-head">
           <h2>{heading}</h2>
+          <input
+            className="task-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("main.search")}
+          />
+          <button
+            className={`sort-toggle ${sortMode === "manual" ? "active" : ""}`}
+            onClick={() => setSortMode((m) => (m === "smart" ? "manual" : "smart"))}
+            title="Tartiblash rejimi (Qo'lda — drag-and-drop)"
+          >
+            {sortMode === "manual" ? t("main.sortManual") : t("main.sortSmart")}
+          </button>
           <label className="toggle">
             <input
               type="checkbox"
               checked={showCompleted}
               onChange={(e) => setShowCompleted(e.target.checked)}
             />
-            Bajarilganlar
+            {t("main.showCompleted")}
           </label>
         </header>
 
@@ -411,9 +564,11 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
 
         {tagFilter && (
           <div className="tag-filter-bar">
-            <span>Filtr:</span>
+            <span>{t("main.filter")}</span>
             <span className="task-tag active">#{tagFilter}</span>
-            <button className="tag-filter-clear" onClick={() => setTagFilter(null)}>× tozalash</button>
+            <button className="tag-filter-clear" onClick={() => setTagFilter(null)}>
+              {t("main.clearFilter")}
+            </button>
           </div>
         )}
 
@@ -422,13 +577,13 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
             ref={quickRef}
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
-            placeholder="+ Vazifa… masalan: ertaga soat 15:00 hisobot !2 #ish"
+            placeholder={t("main.quickAdd")}
           />
         </form>
 
         <div className="task-list">
           {visible.length === 0 ? (
-            <div className="empty">Vazifa yo'q 🎉</div>
+            <div className="empty">{t("main.empty")}</div>
           ) : (
             visible.map((t) => (
               <TaskItem
@@ -439,11 +594,28 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
                 onComplete={() => completeTask(t.id)}
                 onTagClick={(tag) => setTagFilter(tag)}
                 subtaskCount={subtaskCounts[t.id]}
+                draggable={sortMode === "manual"}
+                dragging={dragId === t.id}
+                dragOver={dragOverId === t.id && dragId !== t.id}
+                onDragStart={() => setDragId(t.id)}
+                onDragOver={() => setDragOverId(t.id)}
+                onDrop={() => handleDrop(t.id)}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setDragOverId(null);
+                }}
               />
             ))
           )}
         </div>
       </main>
+      )}
+
+      {pendingDelete && (
+        <div className="undo-toast">
+          <span>🗑 "{pendingDelete.title}" {t("main.undoDeleted")}</span>
+          <button onClick={undoDelete}>{t("main.undo")}</button>
+        </div>
       )}
 
       {selectedTask && (

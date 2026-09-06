@@ -9,6 +9,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Timelike;
 use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -33,6 +34,7 @@ struct Updates {
 struct Update {
     update_id: i64,
     message: Option<Message>,
+    callback_query: Option<CallbackQuery>,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +46,19 @@ struct Message {
 #[derive(Deserialize)]
 struct Chat {
     id: i64,
+}
+
+#[derive(Deserialize)]
+struct CallbackQuery {
+    id: String,
+    data: Option<String>,
+    message: Option<CallbackMessage>,
+}
+
+#[derive(Deserialize)]
+struct CallbackMessage {
+    chat: Chat,
+    message_id: i64,
 }
 
 // ---------- Eslatma qatori ----------
@@ -70,7 +85,9 @@ impl TelegramBot {
         let username = match get_me_username(&client, &token).await {
             Some(u) => u,
             None => {
-                tracing::warn!("Telegram: getMe muvaffaqiyatsiz — token noto'g'ri yoki tarmoq yo'q");
+                tracing::warn!(
+                    "Telegram: getMe muvaffaqiyatsiz — token noto'g'ri yoki tarmoq yo'q"
+                );
                 return None;
             }
         };
@@ -97,6 +114,33 @@ impl TelegramBot {
                 "text": text,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": true,
+            }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    /// Bitta vazifaga "✅ Bajarildi" inline tugmasi bilan xabar yuboradi.
+    async fn send_with_done_button(
+        &self,
+        chat_id: i64,
+        text: &str,
+        task_id: Uuid,
+    ) -> anyhow::Result<()> {
+        let url = format!("{API_BASE}/bot{}/sendMessage", self.token);
+        self.client
+            .post(url)
+            .json(&serde_json::json!({
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": true,
+                "reply_markup": {
+                    "inline_keyboard": [[
+                        { "text": "✅ Bajarildi", "callback_data": format!("done:{task_id}") }
+                    ]]
+                }
             }))
             .send()
             .await?
@@ -138,6 +182,8 @@ impl TelegramBot {
             next = upd.update_id + 1;
             if let Some(msg) = upd.message {
                 self.handle_message(msg).await;
+            } else if let Some(cb) = upd.callback_query {
+                self.handle_callback(cb).await;
             }
         }
         Ok(next)
@@ -168,10 +214,166 @@ impl TelegramBot {
                 .send_message(
                     chat_id,
                     "Buyruqlar:\n/today — bugungi vazifalar\n/help — yordam\n\n\
+                     ➕ Oddiy matn yozsangiz — yangi vazifa qo'shiladi (bugungi kunga).\n\
                      Vazifa eslatmalari belgilangan vaqtida avtomatik keladi.",
                 )
                 .await;
+        } else if text.starts_with('/') {
+            let _ = self
+                .send_message(chat_id, "Noma'lum buyruq. /help ni ko'ring.")
+                .await;
+        } else {
+            // Buyruq bo'lmagan matn — yangi vazifa sifatida qo'shamiz.
+            self.add_task_from_text(chat_id, text).await;
         }
+    }
+
+    /// Botga yozilgan oddiy matndan bugungi kunga vazifa yaratadi.
+    async fn add_task_from_text(&self, chat_id: i64, text: &str) {
+        let uid = self.user_for_chat(chat_id).await;
+        let Some(uid) = uid else {
+            let _ = self
+                .send_message(
+                    chat_id,
+                    "Avval hisobingizni ilovadan ulang (Sozlamalar → Telegram).",
+                )
+                .await;
+            return;
+        };
+        let title = text.trim();
+        if title.is_empty() {
+            return;
+        }
+        let res = sqlx::query(
+            "INSERT INTO tasks (title, user_id, due_date, position)
+             VALUES ($1, $2, date_trunc('day', now()) + interval '23 hours 59 minutes',
+                     COALESCE((SELECT MAX(position) + 1 FROM tasks WHERE user_id = $2), 0))",
+        )
+        .bind(title)
+        .bind(uid)
+        .execute(&self.db)
+        .await;
+        let reply = match res {
+            Ok(_) => format!("➕ Qo'shildi: <b>{}</b>", html_escape(title)),
+            Err(_) => "❌ Vazifa qo'shilmadi.".to_string(),
+        };
+        let _ = self.send_message(chat_id, &reply).await;
+    }
+
+    /// Chatga bog'langan foydalanuvchi id'sini qaytaradi.
+    async fn user_for_chat(&self, chat_id: i64) -> Option<Uuid> {
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE telegram_chat_id = $1")
+            .bind(chat_id)
+            .fetch_optional(&self.db)
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Inline tugma bosilganda — "done:<id>" vazifani bajarilgan deb belgilaydi.
+    async fn handle_callback(&self, cb: CallbackQuery) {
+        let Some(msg) = cb.message else { return };
+        let chat_id = msg.chat.id;
+        let data = cb.data.unwrap_or_default();
+
+        let Some(id_str) = data.strip_prefix("done:") else {
+            let _ = self.answer_callback(&cb.id, "").await;
+            return;
+        };
+        let Ok(task_id) = Uuid::parse_str(id_str) else {
+            let _ = self.answer_callback(&cb.id, "").await;
+            return;
+        };
+        let Some(uid) = self.user_for_chat(chat_id).await else {
+            let _ = self.answer_callback(&cb.id, "Hisob ulanmagan").await;
+            return;
+        };
+
+        // Vazifani egaligini tekshirib olib kelamiz.
+        let task = sqlx::query_as::<
+            _,
+            (
+                String,
+                Option<String>,
+                Option<chrono::DateTime<chrono::Utc>>,
+            ),
+        >(
+            "SELECT title, recurrence, due_date FROM tasks WHERE id = $1 AND user_id = $2"
+        )
+        .bind(task_id)
+        .bind(uid)
+        .fetch_optional(&self.db)
+        .await
+        .ok()
+        .flatten();
+
+        let Some((title, recurrence, due)) = task else {
+            let _ = self.answer_callback(&cb.id, "Topilmadi").await;
+            return;
+        };
+
+        // Takrorlanuvchi bo'lsa — keyingi muddatga suramiz, aks holda bajarilgan.
+        let toast = match (recurrence.as_deref(), due) {
+            (Some(rule), Some(d)) => {
+                let next = crate::routes::tasks::next_occurrence(d, rule);
+                let _ = sqlx::query(
+                    "UPDATE tasks SET due_date = $2, reminder_sent = false, updated_at = now() WHERE id = $1",
+                )
+                .bind(task_id)
+                .bind(next)
+                .execute(&self.db)
+                .await;
+                "🔁 Keyingi muddatga surildi"
+            }
+            _ => {
+                let _ = sqlx::query(
+                    "UPDATE tasks SET completed = true, completed_at = now(), updated_at = now() WHERE id = $1",
+                )
+                .bind(task_id)
+                .execute(&self.db)
+                .await;
+                "✅ Bajarildi"
+            }
+        };
+
+        let _ = self.answer_callback(&cb.id, toast).await;
+        // Xabarni yangilaymiz (tugmani olib tashlab).
+        let _ = self
+            .edit_message(
+                chat_id,
+                msg.message_id,
+                &format!("{toast}: <s>{}</s>", html_escape(&title)),
+            )
+            .await;
+    }
+
+    /// Inline tugma bosilishiga javob (kichik toast).
+    async fn answer_callback(&self, callback_id: &str, text: &str) -> anyhow::Result<()> {
+        let url = format!("{API_BASE}/bot{}/answerCallbackQuery", self.token);
+        self.client
+            .post(url)
+            .json(&serde_json::json!({ "callback_query_id": callback_id, "text": text }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    /// Mavjud xabar matnini tahrirlaydi (tugmalarni olib tashlaydi).
+    async fn edit_message(&self, chat_id: i64, message_id: i64, text: &str) -> anyhow::Result<()> {
+        let url = format!("{API_BASE}/bot{}/editMessageText", self.token);
+        self.client
+            .post(url)
+            .json(&serde_json::json!({
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "HTML",
+            }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
     }
 
     /// `/start <kod>` — kodni tekshirib, chat'ni foydalanuvchiga bog'laydi.
@@ -197,8 +399,10 @@ impl TelegramBot {
         .await;
 
         let text = match linked {
-            Ok(Some(_)) => "✅ Hisobingiz ulandi! Endi vazifa eslatmalari shu yerga keladi.\n\n\
-                            /today — bugungi vazifalar",
+            Ok(Some(_)) => {
+                "✅ Hisobingiz ulandi! Endi vazifa eslatmalari shu yerga keladi.\n\n\
+                            /today — bugungi vazifalar"
+            }
             _ => "❌ Havola yaroqsiz yoki muddati oʻtgan.\nIlovadan yangi havola oling.",
         };
         let _ = self.send_message(chat_id, text).await;
@@ -206,16 +410,14 @@ impl TelegramBot {
 
     /// `/today` — chatga bog'langan foydalanuvchining bugungi vazifalari.
     async fn send_today(&self, chat_id: i64) {
-        let uid = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE telegram_chat_id = $1")
-            .bind(chat_id)
-            .fetch_optional(&self.db)
-            .await
-            .ok()
-            .flatten();
+        let uid = self.user_for_chat(chat_id).await;
 
         let Some(uid) = uid else {
             let _ = self
-                .send_message(chat_id, "Avval hisobingizni ilovadan ulang (Sozlamalar → Telegram).")
+                .send_message(
+                    chat_id,
+                    "Avval hisobingizni ilovadan ulang (Sozlamalar → Telegram).",
+                )
                 .await;
             return;
         };
@@ -241,6 +443,51 @@ impl TelegramBot {
             msg.push_str(&format!("{mark} {}\n", html_escape(&title)));
         }
         let _ = self.send_message(chat_id, &msg).await;
+    }
+
+    // ---------- Ertalabki xulosa ----------
+
+    /// Har kuni belgilangan UTC soatida bog'langan foydalanuvchilarga bugungi
+    /// vazifalar ro'yxatini yuboradi. Soat `TELEGRAM_DIGEST_HOUR` (0–23, standart 3 UTC).
+    pub async fn run_digest(self: Arc<Self>) {
+        let hour: u32 = std::env::var("TELEGRAM_DIGEST_HOUR")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|h| *h < 24)
+            .unwrap_or(3);
+        let mut ticker = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            ticker.tick().await;
+            if chrono::Utc::now().hour() != hour {
+                continue;
+            }
+            if let Err(e) = self.send_digests().await {
+                tracing::warn!("Digest yuborishda xato: {e:?}");
+            }
+        }
+    }
+
+    async fn send_digests(&self) -> anyhow::Result<()> {
+        // Bugun hali xulosa olmagan, ulangan foydalanuvchilar.
+        let rows = sqlx::query_as::<_, (Uuid, i64)>(
+            "SELECT id, telegram_chat_id FROM users
+              WHERE telegram_chat_id IS NOT NULL
+                AND (telegram_digest_date IS NULL OR telegram_digest_date < now()::date)
+              LIMIT 200",
+        )
+        .fetch_all(&self.db)
+        .await?;
+
+        for (uid, chat_id) in rows {
+            // Sanani darhol belgilaymiz — takror yubormaslik uchun.
+            let _ =
+                sqlx::query("UPDATE users SET telegram_digest_date = now()::date WHERE id = $1")
+                    .bind(uid)
+                    .execute(&self.db)
+                    .await;
+            self.send_today(chat_id).await;
+        }
+        Ok(())
     }
 
     // ---------- Eslatma sikli ----------
@@ -273,7 +520,7 @@ impl TelegramBot {
 
         for r in due {
             let text = format!("⏰ <b>Eslatma:</b> {}", html_escape(&r.title));
-            match self.send_message(r.chat_id, &text).await {
+            match self.send_with_done_button(r.chat_id, &text, r.id).await {
                 Ok(_) => {
                     let _ = sqlx::query("UPDATE tasks SET reminder_sent = TRUE WHERE id = $1")
                         .bind(r.id)
@@ -300,5 +547,7 @@ async fn get_me_username(client: &reqwest::Client, token: &str) -> Option<String
 
 /// Telegram HTML rejimidagi maxsus belgilarni ekranlaydi.
 fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }

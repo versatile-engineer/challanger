@@ -30,7 +30,9 @@ async fn create(
     Json(body): Json<CreateProject>,
 ) -> AppResult<Json<Project>> {
     if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest("nom bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "nom bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
     let row = sqlx::query_as::<_, Project>(
         "INSERT INTO projects (name, color, position, user_id)

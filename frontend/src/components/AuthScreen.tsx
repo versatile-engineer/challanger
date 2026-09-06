@@ -25,7 +25,7 @@ export function AuthScreen({ onAuth }: Props) {
         mode === "signup"
           ? await api.signup({ username, email, password })
           : await api.login({ email, password });
-      tokenStore.set(res.token);
+      tokenStore.setTokens(res.token, res.refresh_token);
       onAuth(res.user);
     } catch (err: any) {
       setError(String(err.message ?? err));

@@ -22,7 +22,23 @@ export interface Subtask {
   created_at: string;
 }
 
-export type Recurrence = "daily" | "weekly" | "monthly" | "yearly" | null;
+export type Recurrence =
+  | "daily"
+  | "weekdays"
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "yearly"
+  | null;
+
+export const RECURRENCE_LABELS: Record<string, string> = {
+  daily: "Har kuni",
+  weekdays: "Ish kunlari",
+  weekly: "Har hafta",
+  biweekly: "2 haftada",
+  monthly: "Har oy",
+  yearly: "Har yil",
+};
 
 export interface Task {
   id: string;

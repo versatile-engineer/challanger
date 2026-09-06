@@ -132,9 +132,15 @@ async fn create(
     Json(body): Json<CreateHabit>,
 ) -> AppResult<Json<Habit>> {
     if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest("nom bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "nom bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
-    let frequency = if body.frequency == "weekly" { "weekly" } else { "daily" };
+    let frequency = if body.frequency == "weekly" {
+        "weekly"
+    } else {
+        "daily"
+    };
     let row = sqlx::query_as::<_, HabitRow>(
         "INSERT INTO habits
             (name, color, frequency, target_per_week, start_date, duration_days, end_date, position, user_id)
@@ -220,11 +226,12 @@ async fn toggle(
     Json(body): Json<ToggleBody>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Egalikni tekshirish
-    let owns: Option<Uuid> = sqlx::query_scalar("SELECT id FROM habits WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(user.id)
-        .fetch_optional(&st.db)
-        .await?;
+    let owns: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM habits WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user.id)
+            .fetch_optional(&st.db)
+            .await?;
     if owns.is_none() {
         return Err(AppError::NotFound);
     }

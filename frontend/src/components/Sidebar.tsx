@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Project, User } from "../types";
+import { useT } from "../i18n";
 
 export type Page = "calendar" | "eisenhower" | "habits" | "groups" | "stats" | "pomodoro" | "countdown" | "settings";
 
@@ -8,14 +9,14 @@ export type Selection =
   | { kind: "project"; id: string }
   | { kind: "page"; page: Page };
 
-const PAGES: { page: Page; label: string; icon: string }[] = [
-  { page: "calendar", label: "Kalendar", icon: "📆" },
-  { page: "eisenhower", label: "Eisenhower", icon: "🧭" },
-  { page: "habits", label: "Odatlar", icon: "🔥" },
-  { page: "groups", label: "Jamoa", icon: "👥" },
-  { page: "stats", label: "Statistika", icon: "📈" },
-  { page: "pomodoro", label: "Pomodoro", icon: "🍅" },
-  { page: "countdown", label: "Sanoq (countdown)", icon: "⏳" },
+const PAGES: { page: Page; key: string; icon: string }[] = [
+  { page: "calendar", key: "nav.calendar", icon: "📆" },
+  { page: "eisenhower", key: "nav.eisenhower", icon: "🧭" },
+  { page: "habits", key: "nav.habits", icon: "🔥" },
+  { page: "groups", key: "nav.groups", icon: "👥" },
+  { page: "stats", key: "nav.stats", icon: "📈" },
+  { page: "pomodoro", key: "nav.pomodoro", icon: "🍅" },
+  { page: "countdown", key: "nav.countdown", icon: "⏳" },
 ];
 
 interface Props {
@@ -30,9 +31,9 @@ interface Props {
 }
 
 const SMART = [
-  { view: "today", label: "Bugun", icon: "📅" },
-  { view: "upcoming", label: "Kelgusi", icon: "🗓️" },
-  { view: "all", label: "Barchasi", icon: "📥" },
+  { view: "today", key: "nav.today", icon: "📅" },
+  { view: "upcoming", key: "nav.upcoming", icon: "🗓️" },
+  { view: "all", key: "nav.all", icon: "📥" },
 ] as const;
 
 export function Sidebar({
@@ -46,6 +47,7 @@ export function Sidebar({
   onDeleteProject,
 }: Props) {
   const [newName, setNewName] = useState("");
+  const t = useT();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,14 +72,14 @@ export function Sidebar({
               onClick={() => onSelect({ kind: "smart", view: s.view })}
             >
               <span className="nav-icon">{s.icon}</span>
-              <span className="nav-label">{s.label}</span>
+              <span className="nav-label">{t(s.key)}</span>
               <span className="nav-count">{counts[s.view]}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="nav-heading">Vositalar</div>
+      <div className="nav-heading">{t("nav.tools")}</div>
       <nav className="nav-group">
         {PAGES.map((p) => {
           const active = selection.kind === "page" && selection.page === p.page;
@@ -88,13 +90,13 @@ export function Sidebar({
               onClick={() => onSelect({ kind: "page", page: p.page })}
             >
               <span className="nav-icon">{p.icon}</span>
-              <span className="nav-label">{p.label}</span>
+              <span className="nav-label">{t(p.key)}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="nav-heading">Loyihalar</div>
+      <div className="nav-heading">{t("nav.projects")}</div>
       <nav className="nav-group">
         {projects.map((p) => {
           const active = selection.kind === "project" && selection.id === p.id;
@@ -107,7 +109,7 @@ export function Sidebar({
               </button>
               <button
                 className="project-del"
-                title="O'chirish"
+                title={t("nav.delete")}
                 onClick={() => onDeleteProject(p.id)}
               >
                 ×
@@ -121,7 +123,7 @@ export function Sidebar({
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="+ Yangi loyiha"
+          placeholder={t("nav.newProject")}
         />
       </form>
 
@@ -129,13 +131,13 @@ export function Sidebar({
         <button
           className={`user-info ${selection.kind === "page" && selection.page === "settings" ? "active" : ""}`}
           onClick={() => onSelect({ kind: "page", page: "settings" })}
-          title="Sozlamalar"
+          title={t("nav.settings")}
         >
           <span className="avatar">{user.username.charAt(0).toUpperCase()}</span>
           <span className="username">{user.username}</span>
           <span className="gear">⚙️</span>
         </button>
-        <button className="logout" onClick={onLogout} title="Chiqish">
+        <button className="logout" onClick={onLogout} title={t("nav.logout")}>
           ⎋
         </button>
       </div>

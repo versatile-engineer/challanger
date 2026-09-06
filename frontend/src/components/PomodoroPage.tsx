@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "../api";
 
 type Mode = "work" | "short" | "long";
 
@@ -37,6 +38,11 @@ export function PomodoroPage() {
   const [completed, setCompleted] = useState(0);
   const tick = useRef<number | null>(null);
 
+  // Bugungi tugatilgan fokus sessiyalarini serverdan yuklaymiz
+  useEffect(() => {
+    api.pomodoroStats().then((s) => setCompleted(s.today)).catch(() => {});
+  }, []);
+
   const switchMode = (m: Mode) => {
     setMode(m);
     setLeft(DURATIONS[m]);
@@ -54,6 +60,8 @@ export function PomodoroPage() {
     if (mode === "work") {
       const c = completed + 1;
       setCompleted(c);
+      // Tugatilgan fokus sessiyasini serverga yozamiz (statistika uchun)
+      api.recordPomodoro({ kind: "work", seconds: DURATIONS.work }).catch(() => {});
       switchMode(c % 4 === 0 ? "long" : "short");
     } else {
       switchMode("work");

@@ -5,12 +5,18 @@ vazifa boshqaruvchi.
 
 ## Imkoniyatlar
 
-- 🔐 Autentifikatsiya — ro'yxatdan o'tish (username + email + parol) va kirish (email + parol), JWT tokenlar
+- 🔐 Autentifikatsiya — ro'yxatdan o'tish (username + email + parol) va kirish (email + parol); qisqa muddatli **access token** + aylanuvchi **refresh token** (avtomatik yangilanadi), auth'ga **rate limiting** (brute-force himoyasi)
+- 🌐 **Ko'p tillilik (i18n)** — O'zbekcha / English (Sozlamalardan almashtiriladi)
 - ✅ Vazifalar CRUD — sarlavha, izoh, muddat (due), prioritet (0–3), holat
+- 🔍 **Qidiruv va filtrlar** — matn, teg, prioritet bo'yicha; server tomonda pagination
+- 🖱️ **Drag-and-drop tartiblash** — "Qo'lda" rejimda vazifalarni sichqoncha bilan qayta tartiblash
+- ↶ **Undo** — o'chirilgan vazifani 5 soniya ichida qaytarish (Ctrl+Z)
+- ⌨️ **Klaviatura yorliqlari** — `j/k` navigatsiya, `c` bajarish, `Delete` o'chirish, `/` tez qo'shish
 - 📁 Loyihalar / ro'yxatlar va teglar
-- 🔁 Takrorlanuvchi vazifalar (har kuni / hafta / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
+- 🔁 Takrorlanuvchi vazifalar (har kuni / **ish kunlari** / hafta / **2 haftada** / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
+- 📆 **Kalendar obunasi (iCal)** — muddatli vazifalarni Google / Apple / Outlook kalendariga obuna qilish (`webcal` feed)
 - ⏰ Eslatmalar — brauzer bildirishnomalari **va Telegram bot** orqali
-- 🤖 **Telegram bot** — hisobni ulab, vazifa eslatmalarini Telegram'da xabar sifatida olish (`/today`, `/help` buyruqlari)
+- 🤖 **Telegram bot** — hisobni ulab, eslatmalarni Telegram'da olish; **inline "✅ Bajarildi" tugmasi**, **oddiy matn yozib vazifa qo'shish**, **ertalabki kunlik xulosa** (`/today`, `/help` buyruqlari)
 - 📅 Aqlli ko'rinishlar: **Bugun**, **Kelgusi**, **Barchasi**
 - 📆 **Kalendar** — vazifalar oylik gridda, kunga bosib vazifa qo'shish
 - 🧭 **Eisenhower matritsasi** — 4 kvadrant, drag-and-drop bilan
@@ -18,7 +24,7 @@ vazifa boshqaruvchi.
 - 🧩 **Kichik qadamlar (subtasklar)** — har vazifa ichida checklist va progress
 - 👥 **Jamoa (groupwork)** — guruh yaratish/qo'shilish, jamoaviy odat va vazifalar, reaksiyalar, leaderboard
 - 📊 **Statistika** — vazifa/odat grafiklari (donut, bar, ustunlar)
-- 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar
+- 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar; sessiyalar **serverga yoziladi** va statistikada ko'rinadi (bugungi son, jami fokus vaqti, 30 kunlik grafik)
 - ⏳ **Countdown** — muhim sanalargacha sanoq (localStorage)
 - ⌨️ **Buyruqlar paneli (Ctrl+K)** — tez navigatsiya va amallar
 - ⚙️ **Sozlamalar** — profil (username/email), parol o'zgartirish, mavzu (tizim / yorug' / qorong'i / **gruvbox**), Telegram ulash, zaxira (eksport/import), hisobni o'chirish
@@ -126,7 +132,9 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | Metod  | Yo'l                     | Tavsif |
 |--------|--------------------------|--------|
 | POST   | `/auth/signup`           | Ro'yxatdan o'tish (`username`, `email`, `password`) → token |
-| POST   | `/auth/login`            | Kirish (`email`, `password`) → token |
+| POST   | `/auth/login`            | Kirish (`email`, `password`) → token + refresh_token |
+| POST   | `/auth/refresh`          | Refresh token → yangi access + refresh (rotation) |
+| POST   | `/auth/logout`           | Refresh tokenni bekor qilish |
 | GET    | `/auth/me`               | Joriy foydalanuvchi (token bilan) |
 | PATCH  | `/auth/me`               | Profilni yangilash (`username`, `email`) |
 | DELETE | `/auth/me`               | Hisobni o'chirish (kaskad: vazifa/loyiha/odat) |
@@ -135,11 +143,17 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | POST   | `/projects`              | Loyiha yaratish |
 | PATCH  | `/projects/:id`          | Tahrirlash |
 | DELETE | `/projects/:id`          | O'chirish |
-| GET    | `/tasks?view=today`      | Vazifalar (filtrlar: `project_id`, `completed`, `view`) |
+| GET    | `/tasks?view=today`      | Vazifalar (filtrlar: `project_id`, `completed`, `view`, `search`, `tag`, `priority`, `limit`, `offset`) |
 | POST   | `/tasks`                 | Vazifa yaratish |
+| POST   | `/tasks/reorder`         | Drag-and-drop tartibini saqlash (`{ "ids": [...] }`) |
 | PATCH  | `/tasks/:id`             | Tahrirlash |
 | POST   | `/tasks/:id/complete`    | Bajarilgan (takrorlanuvchi bo'lsa — surish) |
 | DELETE | `/tasks/:id`             | O'chirish |
+| POST   | `/calendar/token`        | iCal feed havolasini yoqish/olish |
+| DELETE | `/calendar/token`        | Feed tokenini yangilash (eski havolani bekor qiladi) |
+| GET    | `/calendar/:token.ics`   | iCalendar feed (autentifikatsiyasiz — token kalit) |
+| GET    | `/pomodoro`              | Pomodoro statistikasi (bugun, jami, daqiqa, 30 kun) |
+| POST   | `/pomodoro`              | Tugatilgan sessiyani yozish (`kind`, `seconds`) |
 | GET    | `/habits`                | Odatlar + oxirgi 90 kunlik bajarilgan kunlar |
 | POST   | `/habits`                | Odat yaratish (`frequency`, `target_per_week`, `duration_days` yoki `end_date`) |
 | PATCH  | `/habits/:id`            | Tahrirlash |
@@ -151,8 +165,18 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 
 > Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa (`/groups*`) yo'llari ham mavjud — kod: `src/routes/`.
 
+## Sinov (testlar)
+
+```bash
+cargo test                       # backend unit-testlar
+cd frontend && pnpm test         # frontend (Vitest) testlar
+```
+
+CI: har push/PR'da `cargo fmt/clippy/test` va frontend `tsc/test/build` ishga tushadi
+(`.github/workflows/ci.yml`).
+
 ## Keyingi qadamlar (g'oyalar)
 
-- Vazifalarni drag-and-drop bilan tartiblash
-- Pomodoro sessiyalarini serverga yozish (statistika)
-- Telegram botga inline tugmalar (vazifani to'g'ridan-to'g'ri bajarish) va kunlik ertalabki xulosa
+- Fayl/rasm biriktirish (attachments)
+- Offline navbat (offline'da qo'shilgan vazifalarni ulanish tiklanganda yuborish)
+- i18n lug'atini kengaytirish (hozircha shell tarjima qilingan — `frontend/src/i18n.ts` kalitlariga qo'shib boring)

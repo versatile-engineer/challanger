@@ -72,7 +72,9 @@ async fn create(
 ) -> AppResult<Json<Subtask>> {
     assert_task_owner(&st, task_id, user.id).await?;
     if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest("qadam bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "qadam bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
     let row = sqlx::query_as::<_, Subtask>(
         "INSERT INTO subtasks (task_id, title, position)

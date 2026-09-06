@@ -173,7 +173,9 @@ async fn require_member(st: &AppState, group_id: Uuid, user_id: Uuid) -> AppResu
 
 async fn require_owner(st: &AppState, group_id: Uuid, user_id: Uuid) -> AppResult<()> {
     if require_member(st, group_id, user_id).await? != "owner" {
-        return Err(AppError::BadRequest("faqat guruh egasi buni qila oladi".into()));
+        return Err(AppError::BadRequest(
+            "faqat guruh egasi buni qila oladi".into(),
+        ));
     }
     Ok(())
 }
@@ -203,7 +205,10 @@ async fn username_of(st: &AppState, user_id: Uuid) -> String {
 
 // ---------- Handlerlar ----------
 
-async fn list_groups(State(st): State<AppState>, user: AuthUser) -> AppResult<Json<Vec<GroupSummary>>> {
+async fn list_groups(
+    State(st): State<AppState>,
+    user: AuthUser,
+) -> AppResult<Json<Vec<GroupSummary>>> {
     let rows = sqlx::query_as::<_, GroupSummary>(
         "SELECT g.id, g.name, g.invite_code, g.owner_id, gm.role,
                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count
@@ -224,7 +229,9 @@ async fn create_group(
     Json(body): Json<CreateGroup>,
 ) -> AppResult<Json<GroupSummary>> {
     if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest("guruh nomi bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "guruh nomi bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
     let mut tx = st.db.begin().await?;
     let group_id: Uuid = sqlx::query_scalar(
@@ -377,7 +384,8 @@ async fn add_member(
         .bind(&username)
         .fetch_optional(&st.db)
         .await?;
-    let target = target.ok_or_else(|| AppError::BadRequest("bunday foydalanuvchi topilmadi".into()))?;
+    let target =
+        target.ok_or_else(|| AppError::BadRequest("bunday foydalanuvchi topilmadi".into()))?;
 
     let res = sqlx::query(
         "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
@@ -457,7 +465,9 @@ async fn join_group(
         let uname = username_of(&st, user.id).await;
         log_activity(&st, group_id, format!("➕ {uname} guruhga qo'shildi")).await;
     }
-    Ok(Json(serde_json::json!({ "ok": true, "group_id": group_id })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "group_id": group_id }),
+    ))
 }
 
 async fn leave_group(
@@ -500,9 +510,15 @@ async fn create_group_habit(
 ) -> AppResult<Json<GroupHabitRow>> {
     require_member(&st, id, user.id).await?;
     if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest("nom bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "nom bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
-    let freq = if body.frequency == "weekly" { "weekly" } else { "daily" };
+    let freq = if body.frequency == "weekly" {
+        "weekly"
+    } else {
+        "daily"
+    };
     let row = sqlx::query_as::<_, GroupHabitRow>(
         "INSERT INTO group_habits (group_id, name, color, frequency, target_per_week)
          VALUES ($1, $2, $3, $4, $5)
@@ -516,7 +532,12 @@ async fn create_group_habit(
     .fetch_one(&st.db)
     .await?;
     let uname = username_of(&st, user.id).await;
-    log_activity(&st, id, format!("🔥 {uname} yangi odat qo'shdi: {}", row.name)).await;
+    log_activity(
+        &st,
+        id,
+        format!("🔥 {uname} yangi odat qo'shdi: {}", row.name),
+    )
+    .await;
     Ok(Json(row))
 }
 
@@ -569,7 +590,9 @@ async fn react_group_habit(
     } else {
         false
     };
-    Ok(Json(serde_json::json!({ "emoji": emoji, "active": active })))
+    Ok(Json(
+        serde_json::json!({ "emoji": emoji, "active": active }),
+    ))
 }
 
 // ---------- Umumiy vazifalar ----------
@@ -582,7 +605,9 @@ async fn create_group_task(
 ) -> AppResult<Json<GroupTaskInfo>> {
     require_member(&st, id, user.id).await?;
     if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest("vazifa bo'sh bo'lishi mumkin emas".into()));
+        return Err(AppError::BadRequest(
+            "vazifa bo'sh bo'lishi mumkin emas".into(),
+        ));
     }
     let row = sqlx::query_as::<_, GroupTaskInfo>(
         "INSERT INTO group_tasks (group_id, title, created_by) VALUES ($1, $2, $3)

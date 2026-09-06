@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { PRIORITY_COLORS } from "../types";
+import { PRIORITY_COLORS, RECURRENCE_LABELS } from "../types";
 import { formatDue } from "../util";
 
 interface Props {
@@ -9,12 +9,54 @@ interface Props {
   onComplete: () => void;
   onTagClick?: (tag: string) => void;
   subtaskCount?: { done: number; total: number };
+  /// Drag-and-drop (faqat "Qo'lda" tartiblash rejimida yoqiladi)
+  draggable?: boolean;
+  dragging?: boolean;
+  dragOver?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: () => void;
+  onDragEnd?: () => void;
 }
 
-export function TaskItem({ task, selected, onSelect, onComplete, onTagClick, subtaskCount }: Props) {
+export function TaskItem({
+  task,
+  selected,
+  onSelect,
+  onComplete,
+  onTagClick,
+  subtaskCount,
+  draggable,
+  dragging,
+  dragOver,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: Props) {
   const due = formatDue(task.due_date);
   return (
-    <div className={`task-item ${selected ? "selected" : ""} ${task.completed ? "done" : ""}`}>
+    <div
+      className={`task-item ${selected ? "selected" : ""} ${task.completed ? "done" : ""} ${
+        dragging ? "dragging" : ""
+      } ${dragOver ? "drag-over" : ""}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={(e) => {
+        if (onDragOver) {
+          e.preventDefault();
+          onDragOver(e);
+        }
+      }}
+      onDrop={(e) => {
+        if (onDrop) {
+          e.preventDefault();
+          onDrop();
+        }
+      }}
+      onDragEnd={onDragEnd}
+    >
+      {draggable && <span className="drag-handle" aria-hidden>⠿</span>}
       <button
         className="checkbox"
         style={{ borderColor: PRIORITY_COLORS[task.priority] }}
@@ -31,7 +73,9 @@ export function TaskItem({ task, selected, onSelect, onComplete, onTagClick, sub
         <div className="task-title">{task.title}</div>
         <div className="task-meta">
           {due.text && <span className={`due tone-${due.tone}`}>{due.text}</span>}
-          {task.recurrence && <span className="recur">🔁 {task.recurrence}</span>}
+          {task.recurrence && (
+            <span className="recur">🔁 {RECURRENCE_LABELS[task.recurrence] ?? task.recurrence}</span>
+          )}
           {task.reminder_at && <span className="reminder">⏰</span>}
           {task.notes && <span className="has-notes">📝</span>}
           {subtaskCount && subtaskCount.total > 0 && (

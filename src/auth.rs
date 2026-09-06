@@ -1,4 +1,6 @@
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use argon2::Argon2;
 use axum::extract::{FromRef, FromRequestParts, State};
 use axum::http::request::Parts;
@@ -8,7 +10,7 @@ use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
@@ -61,7 +63,19 @@ pub struct LoginBody {
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
     pub token: String,
+    pub refresh_token: String,
     pub user: PublicUser,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshBody {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RefreshResponse {
+    pub token: String,
+    pub refresh_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,8 +98,9 @@ struct Claims {
     exp: usize,  // muddati (unix seconds)
 }
 
+/// Qisqa muddatli kirish (access) tokeni — 1 kun.
 fn make_token(user_id: Uuid, secret: &str) -> AppResult<String> {
-    let exp = (Utc::now() + chrono::Duration::days(30)).timestamp() as usize;
+    let exp = (Utc::now() + chrono::Duration::days(1)).timestamp() as usize;
     let claims = Claims {
         sub: user_id.to_string(),
         exp,
@@ -96,6 +111,32 @@ fn make_token(user_id: Uuid, secret: &str) -> AppResult<String> {
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|_| AppError::BadRequest("token yaratib bo'lmadi".into()))
+}
+
+// ---------- Refresh token ----------
+
+/// Refresh token'ni SHA-256 bilan hashlaydi (bazada faqat hash saqlanadi).
+fn hash_refresh(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(token.as_bytes());
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    hex
+}
+
+/// Yangi refresh token yaratib, uning hash'ini bazaga yozadi (30 kun). Ochiq tokenni qaytaradi.
+async fn issue_refresh(db: &PgPool, user_id: Uuid) -> AppResult<String> {
+    let token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let expires = Utc::now() + chrono::Duration::days(30);
+    sqlx::query("INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)")
+        .bind(user_id)
+        .bind(hash_refresh(&token))
+        .bind(expires)
+        .execute(db)
+        .await?;
+    Ok(token)
 }
 
 // ---------- Parol ----------
@@ -111,7 +152,7 @@ fn hash_password(password: &str) -> AppResult<String> {
 /// Username: 3–20 belgi, faqat kichik harflar (a-z) va raqamlar. Bo'sh joy yo'q.
 fn validate_username(username: &str) -> AppResult<()> {
     let len = username.chars().count();
-    if len < 3 || len > 20 {
+    if !(3..=20).contains(&len) {
         return Err(AppError::BadRequest(
             "foydalanuvchi nomi 3–20 ta belgidan iborat bo'lsin".into(),
         ));
@@ -158,7 +199,9 @@ where
             .get(axum::http::header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
             .ok_or(AppError::Unauthorized)?;
-        let token = header.strip_prefix("Bearer ").ok_or(AppError::Unauthorized)?;
+        let token = header
+            .strip_prefix("Bearer ")
+            .ok_or(AppError::Unauthorized)?;
 
         let data = decode::<Claims>(
             token,
@@ -178,8 +221,47 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/login", post(login))
+        .route("/auth/refresh", post(refresh))
+        .route("/auth/logout", post(logout))
         .route("/auth/me", get(me).patch(update_me).delete(delete_me))
         .route("/auth/password", post(change_password))
+}
+
+/// Refresh token bilan yangi access token (va aylantirilgan refresh token) beradi.
+async fn refresh(
+    State(st): State<AppState>,
+    Json(body): Json<RefreshBody>,
+) -> AppResult<Json<RefreshResponse>> {
+    let hash = hash_refresh(&body.refresh_token);
+    // Tokenni topib, darhol o'chiramiz (rotation — bir marta ishlatiladi).
+    let user_id = sqlx::query_scalar::<_, Uuid>(
+        "DELETE FROM refresh_tokens
+          WHERE token_hash = $1 AND expires_at > now()
+          RETURNING user_id",
+    )
+    .bind(&hash)
+    .fetch_optional(&st.db)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
+
+    let token = make_token(user_id, &st.jwt_secret)?;
+    let refresh_token = issue_refresh(&st.db, user_id).await?;
+    Ok(Json(RefreshResponse {
+        token,
+        refresh_token,
+    }))
+}
+
+/// Refresh tokenni bekor qiladi (chiqish).
+async fn logout(
+    State(st): State<AppState>,
+    Json(body): Json<RefreshBody>,
+) -> AppResult<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM refresh_tokens WHERE token_hash = $1")
+        .bind(hash_refresh(&body.refresh_token))
+        .execute(&st.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 async fn signup(
@@ -193,7 +275,9 @@ async fn signup(
         return Err(AppError::BadRequest("email noto'g'ri".into()));
     }
     if body.password.len() < 6 {
-        return Err(AppError::BadRequest("parol kamida 6 ta belgidan iborat bo'lsin".into()));
+        return Err(AppError::BadRequest(
+            "parol kamida 6 ta belgidan iborat bo'lsin".into(),
+        ));
     }
 
     let hash = hash_password(&body.password)?;
@@ -220,10 +304,12 @@ async fn signup(
     })?;
 
     let token = make_token(user.id, &st.jwt_secret)?;
+    let refresh_token = issue_refresh(&st.db, user.id).await?;
     Ok((
         StatusCode::CREATED,
         Json(AuthResponse {
             token,
+            refresh_token,
             user: user.into(),
         }),
     ))
@@ -245,8 +331,10 @@ async fn login(
     };
 
     let token = make_token(user.id, &st.jwt_secret)?;
+    let refresh_token = issue_refresh(&st.db, user.id).await?;
     Ok(Json(AuthResponse {
         token,
+        refresh_token,
         user: user.into(),
     }))
 }
@@ -317,7 +405,9 @@ async fn change_password(
     Json(body): Json<ChangePassword>,
 ) -> AppResult<Json<serde_json::Value>> {
     if body.new_password.len() < 6 {
-        return Err(AppError::BadRequest("yangi parol kamida 6 ta belgidan iborat bo'lsin".into()));
+        return Err(AppError::BadRequest(
+            "yangi parol kamida 6 ta belgidan iborat bo'lsin".into(),
+        ));
     }
     let u = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
         .bind(user.id)
@@ -348,4 +438,61 @@ async fn delete_me(
         .execute(&st.db)
         .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_usernames_accepted() {
+        assert!(validate_username("abc").is_ok());
+        assert!(validate_username("user123").is_ok());
+        assert!(validate_username("a1b2c3d4e5f6g7h8i9j0").is_ok()); // 20 belgi
+    }
+
+    #[test]
+    fn too_short_or_long_rejected() {
+        assert!(validate_username("ab").is_err());
+        assert!(validate_username("a1b2c3d4e5f6g7h8i9j01").is_err()); // 21 belgi
+    }
+
+    #[test]
+    fn invalid_chars_rejected() {
+        assert!(validate_username("User").is_err()); // katta harf
+        assert!(validate_username("user name").is_err()); // bo'sh joy
+        assert!(validate_username("user_name").is_err()); // pastki chiziq
+        assert!(validate_username("olma!").is_err()); // belgi
+    }
+
+    #[test]
+    fn password_hash_verifies() {
+        let hash = hash_password("maxfiy123").unwrap();
+        assert!(verify_password("maxfiy123", &hash));
+        assert!(!verify_password("noto'g'ri", &hash));
+    }
+
+    #[test]
+    fn refresh_hash_is_stable_and_hex() {
+        let h1 = hash_refresh("abc");
+        let h2 = hash_refresh("abc");
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64); // SHA-256 -> 32 bayt -> 64 hex
+        assert!(h1.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(hash_refresh("abc"), hash_refresh("abd"));
+    }
+
+    #[test]
+    fn jwt_roundtrip() {
+        let secret = "test-secret";
+        let id = Uuid::new_v4();
+        let token = make_token(id, secret).unwrap();
+        let data = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &Validation::default(),
+        )
+        .unwrap();
+        assert_eq!(data.claims.sub, id.to_string());
+    }
 }

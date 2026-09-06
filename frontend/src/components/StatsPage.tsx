@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, type PomodoroStats } from "../api";
 import type { GroupDetail, Habit, Project, Subtask, Task } from "../types";
 import { PRIORITY_COLORS, PRIORITY_LABELS } from "../types";
 import { StatTile, LineChart, HBarChart, Donut, ColumnChart } from "./charts";
@@ -30,7 +30,10 @@ interface Data {
   subtasks: Subtask[];
   projects: Project[];
   groups: GroupDetail[];
+  pomodoro: PomodoroStats;
 }
+
+const POMO = "#ef4444"; // pomodoro (qizil)
 
 export function StatsPage({ userId }: { userId: string }) {
   const [data, setData] = useState<Data | null>(null);
@@ -39,15 +42,16 @@ export function StatsPage({ userId }: { userId: string }) {
   useEffect(() => {
     (async () => {
       try {
-        const [tasks, habits, subtasks, projects, groupList] = await Promise.all([
+        const [tasks, habits, subtasks, projects, groupList, pomodoro] = await Promise.all([
           api.listTasks({}),
           api.listHabits(),
           api.listSubtasks(),
           api.listProjects(),
           api.listGroups(),
+          api.pomodoroStats(),
         ]);
         const groups = await Promise.all(groupList.map((g) => api.getGroup(g.id)));
-        setData({ tasks, habits, subtasks, projects, groups });
+        setData({ tasks, habits, subtasks, projects, groups, pomodoro });
       } catch (e: any) {
         setError(String(e.message ?? e));
       }
@@ -56,7 +60,7 @@ export function StatsPage({ userId }: { userId: string }) {
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const { tasks, habits, subtasks, projects, groups } = data;
+    const { tasks, habits, subtasks, projects, groups, pomodoro } = data;
 
     // ----- KPI -----
     const totalTasks = tasks.length;
@@ -102,6 +106,13 @@ export function StatsPage({ userId }: { userId: string }) {
           const i = dayIndex.get(d);
           if (i !== undefined) habit30[i]++;
         }
+    // Pomodoro — oxirgi 30 kun (kunlar oynasiga moslashtiriladi)
+    const pomo30 = new Array(30).fill(0);
+    for (const row of pomodoro.last30) {
+      const i = dayIndex.get(row.day);
+      if (i !== undefined) pomo30[i] = row.count;
+    }
+
     const lineLabels = days.map((d) => d.slice(8)); // kun raqami
 
     // ----- Prioritet donut -----
@@ -176,10 +187,15 @@ export function StatsPage({ userId }: { userId: string }) {
       .sort((a, b) => b.value - a.value);
 
     return {
-      kpi: { totalTasks, doneTasks, groupTasksDone, completionRate, habitCheckins, bestStreak, subDone, subTotal: subtasks.length },
+      kpi: {
+        totalTasks, doneTasks, groupTasksDone, completionRate, habitCheckins, bestStreak,
+        subDone, subTotal: subtasks.length,
+        pomoToday: pomodoro.today, pomoTotal: pomodoro.total, pomoMinutes: pomodoro.minutes_total,
+      },
       line: { labels: lineLabels, series: [
         { name: "Vazifalar", color: S1, points: taskDone30 },
         { name: "Odatlar", color: S2, points: habit30 },
+        { name: "Pomodoro", color: POMO, points: pomo30 },
       ] },
       byPrio,
       projRows,
@@ -208,6 +224,8 @@ export function StatsPage({ userId }: { userId: string }) {
         <StatTile value={stats.kpi.habitCheckins} label="Odat belgilashlari" icon="🔥" />
         <StatTile value={stats.kpi.bestStreak} label="Eng yaxshi joriy streak" icon="🏆" />
         <StatTile value={`${stats.kpi.subDone}/${stats.kpi.subTotal}`} label="Kichik qadamlar" icon="☑" />
+        <StatTile value={stats.kpi.pomoToday} label="Bugungi pomodoro" icon="🍅" accent={POMO} />
+        <StatTile value={`${Math.round(stats.kpi.pomoMinutes / 60)} soat`} label="Jami fokus vaqti" icon="⏱" />
         {stats.hasGroups && (
           <StatTile value={stats.kpi.groupTasksDone} label="Jamoada bajargan" icon="👥" />
         )}
@@ -216,7 +234,7 @@ export function StatsPage({ userId }: { userId: string }) {
       <div className="chart-grid">
         {/* 30 kunlik faollik */}
         <div className="chart-card wide">
-          <h3>Oxirgi 30 kun — bajarilgan vazifa va odatlar</h3>
+          <h3>Oxirgi 30 kun — vazifa, odat va pomodoro</h3>
           <LineChart series={stats.line.series} labels={stats.line.labels} />
         </div>
 

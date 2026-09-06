@@ -2,11 +2,20 @@ import type { GroupDetail, GroupHabit, GroupSummary, GroupTask, Habit, Project, 
 
 const BASE = "/api";
 const TOKEN_KEY = "challanger_token";
+const REFRESH_KEY = "challanger_refresh";
 
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),
   set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  getRefresh: () => localStorage.getItem(REFRESH_KEY),
+  setTokens: (token: string, refresh: string) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(REFRESH_KEY, refresh);
+  },
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  },
 };
 
 /// 401 bo'lganda chaqiriladigan handler (App o'rnatadi)
@@ -15,7 +24,37 @@ export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };
 
-async function req<T>(path: string, options?: RequestInit): Promise<T> {
+// Bir vaqtda faqat bitta refresh so'rovi ketishini ta'minlaydi.
+let refreshing: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
+  const refresh = tokenStore.getRefresh();
+  if (!refresh) return false;
+  try {
+    const res = await fetch(BASE + "/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { token: string; refresh_token: string };
+    tokenStore.setTokens(data.token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureRefresh(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = doRefresh().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
+async function req<T>(path: string, options?: RequestInit, retry = false): Promise<T> {
   const token = tokenStore.get();
   const res = await fetch(BASE + path, {
     headers: {
@@ -25,6 +64,11 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (res.status === 401) {
+    // Access token muddati o'tgan bo'lsa — refresh token bilan bir marta yangilaymiz.
+    if (!retry && path !== "/auth/refresh" && tokenStore.getRefresh()) {
+      const ok = await ensureRefresh();
+      if (ok) return req<T>(path, options, true);
+    }
     onUnauthorized?.();
     throw new Error("avtorizatsiya talab qilinadi");
   }
@@ -40,11 +84,24 @@ export interface TaskFilters {
   project_id?: string;
   completed?: boolean;
   view?: "today" | "upcoming" | "overdue";
+  search?: string;
+  tag?: string;
+  priority?: number;
+  limit?: number;
+  offset?: number;
 }
 
 interface AuthResponse {
   token: string;
+  refresh_token: string;
   user: User;
+}
+
+export interface PomodoroStats {
+  today: number;
+  total: number;
+  minutes_total: number;
+  last30: { day: string; count: number; minutes: number }[];
 }
 
 export const api = {
@@ -53,6 +110,11 @@ export const api = {
     req<AuthResponse>("/auth/signup", { method: "POST", body: JSON.stringify(data) }),
   login: (data: { email: string; password: string }) =>
     req<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+  logout: (refresh_token: string) =>
+    req<{ ok: boolean }>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token }),
+    }),
   me: () => req<User>("/auth/me"),
   updateProfile: (data: { username?: string; email?: string }) =>
     req<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
@@ -69,6 +131,18 @@ export const api = {
     }),
   telegramUnlink: () => req<{ ok: boolean }>("/telegram/unlink", { method: "POST" }),
 
+  // --- Kalendar feed (iCal / webcal obuna) ---
+  calendarEnable: () => req<{ path: string | null }>("/calendar/token", { method: "POST" }),
+  calendarRegenerate: () => req<{ path: string | null }>("/calendar/token", { method: "DELETE" }),
+
+  // --- Pomodoro ---
+  recordPomodoro: (data: { kind: "work" | "short" | "long"; seconds: number }) =>
+    req<{ ok: boolean; today: number }>("/pomodoro", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  pomodoroStats: () => req<PomodoroStats>("/pomodoro"),
+
   // --- Loyihalar ---
   listProjects: () => req<Project[]>("/projects"),
   createProject: (data: { name: string; color?: string }) =>
@@ -84,11 +158,18 @@ export const api = {
     if (filters.project_id) p.set("project_id", filters.project_id);
     if (filters.completed !== undefined) p.set("completed", String(filters.completed));
     if (filters.view) p.set("view", filters.view);
+    if (filters.search) p.set("search", filters.search);
+    if (filters.tag) p.set("tag", filters.tag);
+    if (filters.priority !== undefined) p.set("priority", String(filters.priority));
+    if (filters.limit !== undefined) p.set("limit", String(filters.limit));
+    if (filters.offset !== undefined) p.set("offset", String(filters.offset));
     const qs = p.toString();
     return req<Task[]>(`/tasks${qs ? `?${qs}` : ""}`);
   },
   createTask: (data: Partial<Task>) =>
     req<Task>("/tasks", { method: "POST", body: JSON.stringify(data) }),
+  reorderTasks: (ids: string[]) =>
+    req<{ ok: boolean }>("/tasks/reorder", { method: "POST", body: JSON.stringify({ ids }) }),
   updateTask: (id: string, data: Partial<Task>) =>
     req<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   completeTask: (id: string) =>

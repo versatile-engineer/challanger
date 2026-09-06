@@ -10,6 +10,9 @@ use axum::routing::get;
 use axum::Router;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::key_extractor::SmartIpKeyExtractor;
+use tower_governor::GovernorLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
@@ -54,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("🤖 Telegram bot yoqildi: @{}", bot.username());
             tokio::spawn(bot.clone().run_polling());
             tokio::spawn(bot.clone().run_reminders());
+            tokio::spawn(bot.clone().run_digest());
             Some(bot)
         }
         None => {
@@ -74,12 +78,29 @@ async fn main() -> anyhow::Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Auth endpoint'lariga rate limiting — brute-force himoyasi.
+    // IP kaliti X-Forwarded-For / X-Real-IP orqali (reverse-proxy ortida ham).
+    // Burst 10 ta so'rov, so'ng sekundiga 1 ta to'ldiriladi.
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(1)
+            .burst_size(10)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("governor konfiguratsiyasi"),
+    );
+    let auth_routes = auth::router().layer(GovernorLayer {
+        config: governor_conf,
+    });
+
     let api = Router::new()
         .route("/health", get(|| async { "ok" }))
-        .merge(auth::router())
+        .merge(auth_routes)
         .merge(routes::projects::router())
         .merge(routes::tasks::router())
+        .merge(routes::calendar::router())
         .merge(routes::habits::router())
+        .merge(routes::pomodoro::router())
         .merge(routes::groups::router())
         .merge(routes::subtasks::router())
         .merge(routes::telegram::router());
@@ -100,6 +121,11 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("🚀 Server ishga tushdi: http://{bind_addr}");
-    axum::serve(listener, app).await?;
+    // ConnectInfo — rate limiter IP kalitini olishi uchun kerak.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

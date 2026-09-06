@@ -9,6 +9,9 @@ export default function App() {
   const [checking, setChecking] = useState(true);
 
   const logout = () => {
+    // Serverdagi refresh tokenni ham bekor qilamiz (xato bo'lsa ham chiqamiz)
+    const refresh = tokenStore.getRefresh();
+    if (refresh) api.logout(refresh).catch(() => {});
     tokenStore.clear();
     setUser(null);
   };

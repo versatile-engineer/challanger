@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { User } from "../types";
 import { getTheme, setTheme, type Theme } from "../theme";
+import { getLang, setLang, useT, LANG_LABELS, type Lang } from "../i18n";
 
 interface Props {
   user: User;
@@ -12,6 +13,13 @@ interface Props {
 type Msg = { kind: "ok" | "err"; text: string } | null;
 
 export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
+  const t = useT();
+  const [lang, setLangState] = useState<Lang>(getLang());
+  const chooseLang = (l: Lang) => {
+    setLang(l);
+    setLangState(l);
+  };
+
   // --- Profil ---
   const [username, setUsername] = useState(user.username);
   const [email, setEmail] = useState(user.email);
@@ -67,6 +75,42 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
       setTg((s) => (s ? { ...s, connected: false } : s));
     } finally {
       setTgBusy(false);
+    }
+  };
+
+  // --- Kalendar feed (iCal obuna) ---
+  const [calUrl, setCalUrl] = useState<string | null>(null);
+  const [calBusy, setCalBusy] = useState(false);
+  const [calCopied, setCalCopied] = useState(false);
+  const fullCalUrl = (path: string) => `${window.location.origin}${path}`;
+
+  const enableCalendar = async () => {
+    setCalBusy(true);
+    try {
+      const res = await api.calendarEnable();
+      setCalUrl(res.path ? fullCalUrl(res.path) : null);
+    } finally {
+      setCalBusy(false);
+    }
+  };
+  const regenCalendar = async () => {
+    setCalBusy(true);
+    try {
+      const res = await api.calendarRegenerate();
+      setCalUrl(res.path ? fullCalUrl(res.path) : null);
+      setCalCopied(false);
+    } finally {
+      setCalBusy(false);
+    }
+  };
+  const copyCalUrl = async () => {
+    if (!calUrl) return;
+    try {
+      await navigator.clipboard.writeText(calUrl);
+      setCalCopied(true);
+      setTimeout(() => setCalCopied(false), 2000);
+    } catch {
+      /* clipboard yo'q — jim o'tamiz */
     }
   };
 
@@ -227,7 +271,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
   return (
     <div className="page settings-page">
       <div className="page-head">
-        <h2>Sozlamalar</h2>
+        <h2>{t("settings.title")}</h2>
       </div>
 
       {/* Profil */}
@@ -289,6 +333,23 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             {savingPass ? "…" : "Parolni yangilash"}
           </button>
         </form>
+      </section>
+
+      {/* Til */}
+      <section className="card">
+        <h3>{t("settings.language")}</h3>
+        <div className="seg">
+          {(Object.keys(LANG_LABELS) as Lang[]).map((l) => (
+            <button
+              key={l}
+              type="button"
+              className={lang === l ? "active" : ""}
+              onClick={() => chooseLang(l)}
+            >
+              {LANG_LABELS[l]}
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* Ko'rinish */}
@@ -383,6 +444,36 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
                 Botda Start bosgach, <b>⟳ Tekshirish</b> tugmasini bosing.
               </small>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* Kalendar obunasi */}
+      <section className="card">
+        <h3>Kalendar obunasi (iCal)</h3>
+        <p className="settings-note">
+          Muddatli vazifalaringizni Google, Apple yoki Outlook kalendariga obuna qiling —
+          o'zgarishlar avtomatik ko'rinadi.
+        </p>
+        {!calUrl ? (
+          <button className="btn-primary" onClick={enableCalendar} disabled={calBusy}>
+            {calBusy ? "…" : "Kalendar havolasini yaratish"}
+          </button>
+        ) : (
+          <div className="settings-form">
+            <div className="settings-inline">
+              <input className="cal-url" readOnly value={calUrl} onFocus={(e) => e.target.select()} />
+              <button className="btn-secondary" onClick={copyCalUrl}>
+                {calCopied ? "✓ Nusxalandi" : "Nusxalash"}
+              </button>
+            </div>
+            <small className="settings-note">
+              Bu havolani kalendar dasturingizda "URL orqali obuna" ("Subscribe from URL") bo'limiga
+              joylashtiring. Havolani <b>hech kimga bermang</b> — u vazifalaringizni ochadi.
+            </small>
+            <button className="btn-secondary" onClick={regenCalendar} disabled={calBusy}>
+              ⟳ Havolani yangilash (eskisini bekor qiladi)
+            </button>
           </div>
         )}
       </section>

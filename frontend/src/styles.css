@@ -220,10 +220,94 @@ body {
 .main-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 20px 24px 12px;
 }
-.main-head h2 { margin: 0; font-size: 20px; }
+.main-head h2 { margin: 0; font-size: 20px; margin-right: auto; }
+
+.task-search {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  width: 180px;
+  transition: border-color 0.15s, width 0.15s;
+}
+.task-search:focus { outline: none; border-color: var(--accent); width: 220px; }
+
+.sort-toggle {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sort-toggle:hover { border-color: var(--accent); }
+.sort-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.drag-handle {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 0 2px;
+  user-select: none;
+}
+.task-item.dragging { opacity: 0.4; }
+.task-item.drag-over { box-shadow: 0 -2px 0 var(--accent); }
+
+.undo-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: var(--text);
+  color: var(--panel);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  z-index: 100;
+  animation: undo-in 0.2s ease;
+}
+@keyframes undo-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.undo-toast button {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.undo-toast button:hover { opacity: 0.8; }
+
+.cal-url {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
 .toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; cursor: pointer; }
 
 .error-bar {
