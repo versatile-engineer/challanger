@@ -66,19 +66,22 @@ export interface Habit {
 }
 
 // ---- Jamoa (groupwork) ----
+export type GroupRole = "owner" | "admin" | "member";
+
 export interface GroupSummary {
   id: string;
   name: string;
+  emoji: string;
   invite_code: string;
   owner_id: string;
-  role: "owner" | "member";
+  role: GroupRole;
   member_count: number;
 }
 
 export interface GroupMember {
   user_id: string;
   username: string;
-  role: "owner" | "member";
+  role: GroupRole;
   joined_at: string;
 }
 
@@ -100,6 +103,9 @@ export interface GroupTask {
   done: boolean;
   created_by: string | null;
   done_by: string | null;
+  assigned_to: string | null;
+  due_date: string | null;
+  reminder_at: string | null;
   created_at: string;
 }
 
@@ -109,14 +115,34 @@ export interface GroupActivity {
   created_at: string;
 }
 
+export interface GroupMessage {
+  id: string;
+  user_id: string | null;
+  username: string;
+  text: string;
+  created_at: string;
+}
+
+export interface GroupChallenge {
+  id: string;
+  title: string;
+  start_date: string; // ISO sana
+  end_date: string;
+}
+
 export interface GroupDetail {
   id: string;
   name: string;
+  emoji: string;
+  description: string;
   invite_code: string;
   owner_id: string;
+  my_role: GroupRole;
   members: GroupMember[];
   habits: GroupHabit[];
   tasks: GroupTask[];
+  messages: GroupMessage[];
+  challenges: GroupChallenge[];
   activity: GroupActivity[];
 }
 

@@ -50,6 +50,8 @@ docker compose down -v     # ⚠️ to'xtatish + BAZANI O'CHIRISH
 | `APP_PORT` | Yo'q | `3000` | Tashqi port (`host:APP_PORT → konteyner:3000`) |
 | `TELEGRAM_BOT_TOKEN` | Yo'q | — | @BotFather tokeni. Bo'sh bo'lsa bot o'chiq. |
 | `TELEGRAM_DIGEST_HOUR` | Yo'q | `3` | Kunlik xulosa yuboriladigan **UTC** soati (0–23) |
+| `VAPID_PRIVATE_KEY` | Yo'q | — | Web Push maxfiy kaliti (base64url). Bo'sh bo'lsa push o'chiq. `scripts/genvapid.sh`. |
+| `VAPID_SUBJECT` | Yo'q | `mailto:admin@challanger.app` | Push provayderlari uchun aloqa (mailto:). |
 | `CORS_ALLOWED_ORIGINS` | Yo'q | *(barchasi ochiq)* | Vergul bilan ajratilgan ruxsat etilgan originlar. Prodda cheklang. |
 | `RUST_LOG` | Yo'q | `challanger=info,tower_http=warn,info` | Log darajasi |
 | `BIND_ADDR` | Yo'q | `0.0.0.0:3000` | Server tinglaydigan manzil (konteynerda) |
@@ -160,7 +162,46 @@ scripts/dev.sh               # baza + backend + frontend birga
 
 ---
 
-## 8. Muammolarni bartaraf etish
+## 8. Web Push (brauzer bildirishnomasi) — ixtiyoriy
+
+Ilova **yopiq bo'lsa ham** keladigan bildirishnoma. To'liq **bepul** — Google/Mozilla/Apple
+push serverlari orqali, VAPID standarti (hech qanday uchinchi tomon xizmati kerak emas).
+
+1. **VAPID kalitini yarating** (bir marta):
+
+   ```bash
+   scripts/genvapid.sh
+   # -> VAPID_PRIVATE_KEY=... ni nusxa oling (faqat maxfiy kalit kerak,
+   #    ochiq kalitni server o'zi hosil qiladi)
+   ```
+
+2. **`.env` ga qo'shing**:
+
+   ```
+   VAPID_PRIVATE_KEY=<yuqoridagi qiymat>
+   VAPID_SUBJECT=mailto:siz@example.com
+   ```
+
+3. Konteynerni qayta quring:
+
+   ```bash
+   docker compose up -d --build app
+   ```
+
+   Logda `🔔 Web Push yoqildi (VAPID)` chiqadi. Foydalanuvchi **Sozlamalar →
+   Bildirishnomalar → "Push'ni yoqish"** tugmasi orqali obuna bo'ladi.
+
+**Qanday ishlaydi:** eslatma vaqti yetganda server bir vazifani ham Telegram, ham Web Push'ga
+yuboradi (ikkalasi ixtiyoriy). `VAPID_PRIVATE_KEY` bo'sh bo'lsa push o'chiq turadi —
+tugma ko'rinmaydi, eslatmalar avvalgidek Telegram orqali ketaveradi.
+
+> ⚠️ **HTTPS shart.** Web Push faqat `https://` (yoki dev'da `localhost`) da ishlaydi —
+> shuning uchun push uchun 3-bo'limdagi reverse-proxy (HTTPS) sozlangan bo'lishi kerak.
+> Kalit uzoq muddatli: `VAPID_PRIVATE_KEY` ni o'zgartirsangiz mavjud obunalar yaroqsiz bo'ladi.
+
+---
+
+## 9. Muammolarni bartaraf etish
 
 | Alomat | Sabab / yechim |
 |--------|----------------|
@@ -168,6 +209,8 @@ scripts/dev.sh               # baza + backend + frontend birga
 | `db` "unhealthy" | Baza hali ko'tarilmagan; `depends_on: healthy` kutadi — birinchi startda biroz kuting |
 | 502 (reverse-proxy) | `app` hali ishga tushmagan yoki port noto'g'ri; `docker compose logs app` |
 | Frontend ochiladi, API 401/CORS xatosi | Alohida domen ishlatsangiz `CORS_ALLOWED_ORIGINS` ni to'g'ri bering |
+| Push tugmasi ko'rinmaydi | `VAPID_PRIVATE_KEY` o'rnatilmagan yoki logda `Web Push o'chirilgan` — kalit qo'shib qayta build qiling |
+| "Push'ni yoqish" ishlamaydi / obuna bo'lmaydi | Sayt HTTPS'da emas (yoki `localhost` emas); brauzer bildirishnomani bloklagan bo'lishi mumkin |
 | Loglarni ko'rish | `docker compose logs -f app` / `docker compose logs -f db` |
 
 ---
@@ -178,3 +221,4 @@ scripts/dev.sh               # baza + backend + frontend birga
 - `Dockerfile` — 3 bosqichli build (frontend → backend → runtime)
 - `.env.docker.example` — muhit namunasi
 - `.dockerignore` — build kontekstidan chiqarib tashlanadigan fayllar
+- `scripts/genvapid.sh` — Web Push uchun VAPID kalitini yaratadi

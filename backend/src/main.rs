@@ -1,6 +1,8 @@
 mod auth;
 mod error;
 mod models;
+mod push;
+mod reminders;
 mod routes;
 mod telegram;
 mod validate;
@@ -25,6 +27,7 @@ pub struct AppState {
     pub db: PgPool,
     pub jwt_secret: Arc<String>,
     pub telegram: Option<Arc<TelegramBot>>,
+    pub push: Option<Arc<push::WebPush>>,
 }
 
 #[tokio::main]
@@ -88,10 +91,23 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Web Push (ixtiyoriy) — VAPID_PRIVATE_KEY berilganda yoqiladi.
+    let push = push::WebPush::from_env();
+    match &push {
+        Some(_) => tracing::info!("🔔 Web Push yoqildi (VAPID)"),
+        None => tracing::info!("Web Push o'chirilgan (VAPID_PRIVATE_KEY yo'q)"),
+    }
+
+    // Shaxsiy eslatma dispatcheri (Telegram + Web Push) — kamida bitta kanal bo'lsa.
+    if telegram.is_some() || push.is_some() {
+        tokio::spawn(reminders::run(db.clone(), telegram.clone(), push.clone()));
+    }
+
     let state = AppState {
         db,
         jwt_secret: Arc::new(jwt_secret),
         telegram,
+        push,
     };
 
     // CORS: CORS_ALLOWED_ORIGINS (vergul bilan) berilsa — faqat o'shalar; aks holda
@@ -153,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::groups::router())
         .merge(routes::subtasks::router())
         .merge(routes::telegram::router())
+        .merge(push::router())
         .layer(GovernorLayer::new(general_conf));
 
     // Qurilgan frontend'ni (Vite `dist`) shu serverdan beramiz.

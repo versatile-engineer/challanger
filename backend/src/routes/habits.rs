@@ -248,11 +248,15 @@ async fn toggle(
         .await?;
 
     let done = if deleted.rows_affected() == 0 {
-        sqlx::query("INSERT INTO habit_entries (habit_id, day) VALUES ($1, $2)")
-            .bind(id)
-            .bind(body.day)
-            .execute(&st.db)
-            .await?;
+        // Bir vaqtdagi ikki so'rov (tez ikki marta bosish) ikkalasi ham 0 o'chirib,
+        // ikkalasi INSERT qilsa — ON CONFLICT bo'lmasa ikkinchisi PK buzilishi (500) beradi.
+        sqlx::query(
+            "INSERT INTO habit_entries (habit_id, day) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(id)
+        .bind(body.day)
+        .execute(&st.db)
+        .await?;
         true
     } else {
         false

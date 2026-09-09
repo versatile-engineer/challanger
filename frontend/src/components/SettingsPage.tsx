@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { User } from "../types";
 import { getTheme, setTheme, type Theme } from "../theme";
 import { getLang, setLang, useT, LANG_LABELS, type Lang } from "../i18n";
+import { pushState as getPushState, enablePush, disablePush } from "../push";
 
 interface Props {
   user: User;
@@ -40,6 +41,32 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
   const [notif, setNotif] = useState<NotificationPermission | "unsupported">(
     "Notification" in window ? Notification.permission : "unsupported"
   );
+
+  // --- Web Push ---
+  const [push, setPush] = useState<Awaited<ReturnType<typeof getPushState>> | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushErr, setPushErr] = useState<string | null>(null);
+  useEffect(() => {
+    getPushState().then(setPush).catch(() => setPush("unsupported"));
+  }, []);
+  const togglePush = async () => {
+    setPushBusy(true);
+    setPushErr(null);
+    try {
+      if (push === "subscribed") {
+        await disablePush();
+        setPush("unsubscribed");
+      } else {
+        await enablePush();
+        setPush("subscribed");
+        setNotif(Notification.permission);
+      }
+    } catch (e: any) {
+      setPushErr(String(e.message ?? e));
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // --- Telegram ---
   const [tg, setTg] = useState<{ configured: boolean; connected: boolean } | null>(null);
@@ -394,6 +421,23 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             </button>
           </div>
         )}
+
+        {/* Web Push — ilova yopiq bo'lsa ham keladigan bildirishnoma */}
+        {push && push !== "unsupported" && push !== "disabled" && (
+          <div className="settings-inline push-row">
+            <p className="settings-note">
+              {push === "subscribed" ? t("settings.pushOn") : t("settings.pushOff")}
+            </p>
+            <button
+              className={push === "subscribed" ? "btn-secondary" : "btn-primary"}
+              onClick={togglePush}
+              disabled={pushBusy || push === "denied"}
+            >
+              {pushBusy ? "…" : push === "subscribed" ? t("settings.pushDisable") : t("settings.pushEnable")}
+            </button>
+          </div>
+        )}
+        {pushErr && <p className="settings-note err">⚠️ {pushErr}</p>}
       </section>
 
       {/* Telegram */}

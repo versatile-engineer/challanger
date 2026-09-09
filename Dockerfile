@@ -28,6 +28,11 @@ RUN pnpm build   # -> /app/frontend/dist
 FROM rust:1-bookworm AS backend
 WORKDIR /app
 
+# web-push (ece) openssl'ga bog'langan — kompilyatsiya uchun libssl-dev + pkg-config kerak
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Bog'liqliklarni keshlash: avval faqat manifest, so'ng bo'sh main bilan qurish
 COPY backend/Cargo.toml backend/Cargo.lock ./
 RUN mkdir src && echo 'fn main() {}' > src/main.rs \
@@ -47,9 +52,9 @@ RUN touch src/main.rs && cargo build --release
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 
-# TLS (Telegram API) uchun sertifikatlar
+# TLS (Telegram API) sertifikatlari + libssl3 (web-push/ece uchun runtime kutubxona)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Root emas, oddiy foydalanuvchi bilan ishlaymiz

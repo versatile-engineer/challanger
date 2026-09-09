@@ -1,5 +1,37 @@
-// Challanger service worker — oddiy offline qobiq (app shell).
-const CACHE = "challanger-v1";
+// Challanger service worker — offline qobiq (app shell) + Web Push.
+const CACHE = "challanger-v2";
+
+// ---- Web Push ----
+// Server yuborgan push xabarini (JSON: {title, body}) bildirishnoma sifatida ko'rsatadi.
+self.addEventListener("push", (e) => {
+  let data = { title: "Challanger", body: "" };
+  try {
+    data = e.data.json();
+  } catch {
+    if (e.data) data.body = e.data.text();
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title || "Challanger", {
+      body: data.body || "",
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      tag: "challanger-reminder",
+    })
+  );
+});
+
+// Bildirishnoma bosilganda — ochiq oynaga o'tadi yoki yangisini ochadi.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow("/");
+    })
+  );
+});
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();

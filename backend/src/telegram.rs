@@ -104,6 +104,23 @@ impl TelegramBot {
         &self.username
     }
 
+    /// Berilgan foydalanuvchiga (Telegram'ga ulangan bo'lsa) xabar yuboradi.
+    /// Ulanmagan bo'lsa jimgina o'tadi. Guruh "turtki"lari uchun ishlatiladi.
+    pub async fn notify_user(&self, user_id: Uuid, text: &str) {
+        let chat: Option<i64> = sqlx::query_scalar(
+            "SELECT telegram_chat_id FROM users
+              WHERE id = $1 AND telegram_chat_id IS NOT NULL",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.db)
+        .await
+        .ok()
+        .flatten();
+        if let Some(chat_id) = chat {
+            let _ = self.send_message(chat_id, text).await;
+        }
+    }
+
     /// Bitta chatga xabar yuboradi (HTML rejimida).
     async fn send_message(&self, chat_id: i64, text: &str) -> anyhow::Result<()> {
         let url = format!("{API_BASE}/bot{}/sendMessage", self.token);
@@ -146,6 +163,15 @@ impl TelegramBot {
             .await?
             .error_for_status()?;
         Ok(())
+    }
+
+    /// Shaxsiy vazifa eslatmasini (bajarish tugmasi bilan) yuboradi.
+    /// `reminders` dispatcheri chaqiradi. Xatoni faqat log qiladi.
+    pub async fn send_task_reminder(&self, chat_id: i64, title: &str, task_id: Uuid) {
+        let text = format!("⏰ <b>Eslatma:</b> {}", html_escape(title));
+        if let Err(e) = self.send_with_done_button(chat_id, &text, task_id).await {
+            tracing::warn!("Telegram eslatma yuborilmadi (chat {chat_id}): {e:?}");
+        }
     }
 
     // ---------- Long polling ----------
@@ -512,26 +538,28 @@ impl TelegramBot {
 
     // ---------- Eslatma sikli ----------
 
-    /// Har 30 soniyada muddati yetgan eslatmalarni yuboradi.
+    /// Har 30 soniyada muddati yetgan **guruh** vazifa eslatmalarini yuboradi.
+    /// Shaxsiy eslatmalar `reminders` dispatcherida (Telegram + Web Push).
     pub async fn run_reminders(self: Arc<Self>) {
         let mut ticker = tokio::time::interval(Duration::from_secs(30));
         loop {
             ticker.tick().await;
-            if let Err(e) = self.send_due_reminders().await {
-                tracing::warn!("Eslatma yuborishda xato: {e:?}");
+            if let Err(e) = self.send_due_group_reminders().await {
+                tracing::warn!("Guruh eslatmasida xato: {e:?}");
             }
         }
     }
 
-    async fn send_due_reminders(&self) -> anyhow::Result<()> {
+    /// Muddati yetgan jamoaviy vazifa eslatmalarini mas'ul a'zoga yuboradi.
+    async fn send_due_group_reminders(&self) -> anyhow::Result<()> {
         let due = sqlx::query_as::<_, DueReminder>(
-            "SELECT t.id, t.title, u.telegram_chat_id AS chat_id
-               FROM tasks t
-               JOIN users u ON u.id = t.user_id
-              WHERE t.reminder_at IS NOT NULL
-                AND t.reminder_at <= now()
-                AND t.reminder_sent = FALSE
-                AND t.completed = FALSE
+            "SELECT gt.id, gt.title, u.telegram_chat_id AS chat_id
+               FROM group_tasks gt
+               JOIN users u ON u.id = gt.assigned_to
+              WHERE gt.reminder_at IS NOT NULL
+                AND gt.reminder_at <= now()
+                AND gt.reminder_sent = FALSE
+                AND gt.done = FALSE
                 AND u.telegram_chat_id IS NOT NULL
               LIMIT 50",
         )
@@ -539,16 +567,16 @@ impl TelegramBot {
         .await?;
 
         for r in due {
-            let text = format!("⏰ <b>Eslatma:</b> {}", html_escape(&r.title));
-            match self.send_with_done_button(r.chat_id, &text, r.id).await {
+            let text = format!("⏰ <b>Guruh vazifasi:</b> {}", html_escape(&r.title));
+            match self.send_message(r.chat_id, &text).await {
                 Ok(_) => {
-                    let _ = sqlx::query("UPDATE tasks SET reminder_sent = TRUE WHERE id = $1")
-                        .bind(r.id)
-                        .execute(&self.db)
-                        .await;
+                    let _ =
+                        sqlx::query("UPDATE group_tasks SET reminder_sent = TRUE WHERE id = $1")
+                            .bind(r.id)
+                            .execute(&self.db)
+                            .await;
                 }
-                // Yuborilmasa — belgilamaymiz, keyingi siklda qayta urinadi.
-                Err(e) => tracing::warn!("Telegram xabar yuborilmadi (chat {}): {e:?}", r.chat_id),
+                Err(e) => tracing::warn!("Guruh eslatmasi yuborilmadi (chat {}): {e:?}", r.chat_id),
             }
         }
         Ok(())

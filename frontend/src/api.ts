@@ -1,4 +1,4 @@
-import type { GroupDetail, GroupHabit, GroupSummary, GroupTask, Habit, Project, Subtask, Task, User } from "./types";
+import type { GroupChallenge, GroupDetail, GroupHabit, GroupMessage, GroupRole, GroupSummary, GroupTask, Habit, Project, Subtask, Task, User } from "./types";
 
 const BASE = "/api";
 const TOKEN_KEY = "challanger_token";
@@ -148,6 +148,13 @@ export const api = {
     }),
   telegramUnlink: () => req<{ ok: boolean }>("/telegram/unlink", { method: "POST" }),
 
+  // --- Web Push ---
+  pushVapidKey: () => req<{ key: string }>("/push/vapid"),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    req<{ ok: boolean }>("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
+  pushUnsubscribe: (endpoint: string) =>
+    req<{ ok: boolean }>("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+
   // --- Kalendar feed (iCal / webcal obuna) ---
   calendarEnable: () => req<{ path: string | null }>("/calendar/token", { method: "POST" }),
   calendarRegenerate: () => req<{ path: string | null }>("/calendar/token", { method: "DELETE" }),
@@ -234,6 +241,10 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
   getGroup: (id: string) => req<GroupDetail>(`/groups/${id}`),
+  updateGroup: (id: string, data: { name?: string; emoji?: string; description?: string }) =>
+    req<{ ok: boolean }>(`/groups/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  regenerateGroupCode: (id: string) =>
+    req<{ invite_code: string }>(`/groups/${id}/regenerate`, { method: "POST" }),
   deleteGroup: (id: string) => req<{ ok: boolean }>(`/groups/${id}`, { method: "DELETE" }),
   leaveGroup: (id: string) =>
     req<{ ok: boolean }>(`/groups/${id}/leave`, { method: "POST" }),
@@ -244,6 +255,16 @@ export const api = {
     }),
   removeGroupMember: (id: string, uid: string) =>
     req<{ ok: boolean }>(`/groups/${id}/members/${uid}`, { method: "DELETE" }),
+  setGroupMemberRole: (id: string, uid: string, role: GroupRole) =>
+    req<{ ok: boolean }>(`/groups/${id}/members/${uid}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+  nudgeMember: (id: string, userId: string, habitName?: string) =>
+    req<{ ok: boolean }>(`/groups/${id}/nudge`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, habit_name: habitName }),
+    }),
   createGroupHabit: (
     id: string,
     data: { name: string; color?: string; frequency?: "daily" | "weekly"; target_per_week?: number }
@@ -260,10 +281,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ emoji }),
     }),
-  createGroupTask: (id: string, title: string) =>
-    req<GroupTask>(`/groups/${id}/tasks`, { method: "POST", body: JSON.stringify({ title }) }),
+  createGroupTask: (
+    id: string,
+    data: { title: string; assigned_to?: string | null; due_date?: string | null; reminder_at?: string | null }
+  ) => req<GroupTask>(`/groups/${id}/tasks`, { method: "POST", body: JSON.stringify(data) }),
+  updateGroupTask: (
+    tid: string,
+    data: { assigned_to?: string | null; due_date?: string | null; reminder_at?: string | null }
+  ) => req<GroupTask>(`/group-tasks/${tid}`, { method: "PATCH", body: JSON.stringify(data) }),
   toggleGroupTask: (tid: string) =>
     req<GroupTask>(`/group-tasks/${tid}/toggle`, { method: "POST" }),
   deleteGroupTask: (tid: string) =>
     req<{ ok: boolean }>(`/group-tasks/${tid}`, { method: "DELETE" }),
+
+  // --- Guruh chati ---
+  sendGroupMessage: (id: string, text: string) =>
+    req<GroupMessage>(`/groups/${id}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
+  deleteGroupMessage: (mid: string) =>
+    req<{ ok: boolean }>(`/group-messages/${mid}`, { method: "DELETE" }),
+
+  // --- Guruh challenge'lari ---
+  createChallenge: (id: string, data: { title: string; start_date: string; end_date: string }) =>
+    req<GroupChallenge>(`/groups/${id}/challenges`, { method: "POST", body: JSON.stringify(data) }),
+  deleteChallenge: (cid: string) =>
+    req<{ ok: boolean }>(`/group-challenges/${cid}`, { method: "DELETE" }),
 };

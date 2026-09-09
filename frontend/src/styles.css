@@ -1150,3 +1150,94 @@ body {
 .col-label { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ============ Guruh — yangi funksiyalar ============ */
+.group-emoji { font-size: 1.1em; }
+.gd-desc { color: var(--muted); font-size: 14px; margin: -4px 0 12px; }
+
+/* Tab'lar ko'p bo'lgani uchun — gorizontal skroll */
+.gd-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+.gd-tabs button { white-space: nowrap; }
+
+/* Streak va haftalik maqsad */
+.gh-streak { font-size: 12px; font-weight: 700; color: #f97316; margin-left: 4px; }
+.gh-target { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+
+/* Vazifa mas'uli / muddati */
+.gtask-due { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.gtask-assign {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  border-radius: 6px; font: inherit; font-size: 12px; padding: 3px 6px; max-width: 120px;
+}
+
+/* ---- Chat ---- */
+.chat-tab { display: flex; flex-direction: column; height: 60vh; }
+.chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; }
+.chat-msg {
+  position: relative; align-self: flex-start; max-width: 78%;
+  background: var(--card, #fff); border: 1px solid var(--border);
+  border-radius: 12px; padding: 7px 12px; font-size: 14px;
+}
+.chat-msg.mine { align-self: flex-end; background: var(--accent-soft); border-color: var(--accent-soft); }
+.chat-author { display: block; font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+.chat-text { display: block; word-break: break-word; white-space: pre-wrap; }
+.chat-time { display: block; font-size: 10px; color: var(--muted); text-align: right; margin-top: 2px; }
+.chat-del {
+  position: absolute; top: 2px; right: 4px; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 14px; opacity: 0; transition: opacity .15s;
+}
+.chat-msg:hover .chat-del { opacity: 1; }
+.chat-form { display: flex; gap: 8px; margin-top: 10px; }
+.chat-form input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+
+/* ---- Challenge ---- */
+.challenge-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.challenge-form input[type="text"], .challenge-form > input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.challenge-form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
+.challenge-form input[type="date"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.challenge-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.challenge-card.ended { opacity: .7; }
+.challenge-head { display: flex; align-items: center; gap: 8px; }
+.challenge-name { font-weight: 700; flex: 1; }
+.challenge-status { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--bg); color: var(--muted); }
+.challenge-status.active { background: #dcfce7; color: #15803d; }
+.challenge-dates { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+.challenge-leader { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.leaderboard.mini .lb-row { padding: 2px 0; }
+
+/* ---- Badge (yutuq) ---- */
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.badge-chip { font-size: 13px; padding: 5px 12px; border-radius: 20px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* ---- Leaderboard davrlari + streak ---- */
+.stat-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.seg.sm button { padding: 4px 10px; font-size: 12px; }
+.lb-streak { color: #f97316; font-size: 12px; font-weight: 700; }
+
+/* ---- Heatmap ---- */
+.heatmap { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; max-width: 340px; }
+.heat-cell { aspect-ratio: 1; border-radius: 3px; background: var(--bg); }
+.heat-cell.h1 { background: color-mix(in srgb, var(--accent) 30%, var(--bg)); }
+.heat-cell.h2 { background: color-mix(in srgb, var(--accent) 55%, var(--bg)); }
+.heat-cell.h3 { background: color-mix(in srgb, var(--accent) 78%, var(--bg)); }
+.heat-cell.h4 { background: var(--accent); }
+
+/* ---- A'zolar: turtki, rol, profil ---- */
+.member-nudge, .member-role {
+  border: none; background: transparent; cursor: pointer; font-size: 14px;
+  padding: 2px 4px; border-radius: 6px; line-height: 1;
+}
+.member-nudge:hover, .member-role:hover { background: var(--bg); }
+.member-badge.admin { background: #fef3c7; color: #b45309; }
+.profile-editor { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+.profile-editor .row { display: flex; gap: 8px; }
+.profile-editor input, .profile-editor textarea {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text); font: inherit; flex: 1;
+}
+.profile-editor .emoji-input { flex: 0 0 56px; text-align: center; font-size: 18px; }
+.gd-regen { margin: 8px 0; }
+
+/* Web Push sozlamasi */
+.push-row { margin-top: 10px; }
+.settings-note.err { color: #dc2626; }

@@ -36,6 +36,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-CHANGE-ME-in-production}
       # Ixtiyoriy — bo'sh bo'lsa bot o'chiq
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Web Push (ixtiyoriy) — bo'sh bo'lsa push o'chiq. Kalit yaratish uchun docs/deploy.md
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@challanger.app}
       RUST_LOG: challanger=info,tower_http=warn,info
     ports:
       - "${APP_PORT:-3000}:3000"

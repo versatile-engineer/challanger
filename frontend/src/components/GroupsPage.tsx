@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { GroupDetail, GroupSummary, User } from "../types";
+import type { GroupDetail, GroupRole, GroupSummary, User } from "../types";
 import { useT, getLang } from "../i18n";
 
 function ymd(d: Date): string {
@@ -30,6 +30,46 @@ function prevWeekDays(): string[] {
   return out;
 }
 
+/// Oxirgi `n` kun (eskidan yangiga), ISO sana formatida.
+function lastNDays(n: number): string[] {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) out.push(ymd(new Date(now.getTime() - i * 86400000)));
+  return out;
+}
+
+/// Backend javobini xavfsiz holatga keltiradi — eski API (massiv maydonlarsiz)
+/// qaytarsa ham frontend qulamasligi uchun standart qiymatlar bilan to'ldiradi.
+function normalizeDetail(d: GroupDetail): GroupDetail {
+  return {
+    ...d,
+    emoji: d.emoji ?? "👥",
+    description: d.description ?? "",
+    my_role: d.my_role ?? "member",
+    members: d.members ?? [],
+    habits: d.habits ?? [],
+    tasks: d.tasks ?? [],
+    messages: d.messages ?? [],
+    challenges: d.challenges ?? [],
+    activity: d.activity ?? [],
+  };
+}
+
+/// Berilgan bajarilgan kunlar to'plamidan bugungacha uzluksiz seriya (streak) uzunligi.
+function currentStreak(days: Set<string>): number {
+  let streak = 0;
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  // Bugun belgilanmagan bo'lsa — kechadan boshlab sanaymiz (seriya hali uzilmagan).
+  if (!days.has(ymd(d))) d.setDate(d.getDate() - 1);
+  while (days.has(ymd(d))) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}
+
 export function GroupsPage({ user }: { user: User }) {
   const t = useT();
   const [groups, setGroups] = useState<GroupSummary[]>([]);
@@ -51,11 +91,11 @@ export function GroupsPage({ user }: { user: User }) {
       setDetail(null);
       return;
     }
-    api.getGroup(selectedId).then(setDetail).catch((e) => setError(String(e.message ?? e)));
+    api.getGroup(selectedId).then((d) => setDetail(normalizeDetail(d))).catch((e) => setError(String(e.message ?? e)));
   }, [selectedId]);
 
   const refreshDetail = () =>
-    selectedId && api.getGroup(selectedId).then(setDetail).catch(() => {});
+    selectedId && api.getGroup(selectedId).then((d) => setDetail(normalizeDetail(d))).catch(() => {});
 
   const createGroup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,9 +180,11 @@ export function GroupsPage({ user }: { user: User }) {
         {groups.map((g) => (
           <button key={g.id} className="group-card" onClick={() => setSelectedId(g.id)}>
             <div className="group-card-main">
-              <span className="group-name">{g.name}</span>
+              <span className="group-name">
+                <span className="group-emoji">{g.emoji}</span> {g.name}
+              </span>
               <span className="group-meta">
-                {t("groups.membersCount", { n: g.member_count })} · {g.role === "owner" ? t("groups.roleOwner") : t("groups.roleMember")}
+                {t("groups.membersCount", { n: g.member_count })} · {g.role === "owner" ? t("groups.roleOwner") : g.role === "admin" ? t("groups.roleAdmin") : t("groups.roleMember")}
               </span>
             </div>
             <span className="group-arrow">›</span>
@@ -165,15 +207,18 @@ interface DetailProps {
   error: string | null;
 }
 
+type Tab = "habits" | "tasks" | "chat" | "challenges" | "stats" | "activity" | "members";
+
 function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, setError, error }: DetailProps) {
   const t = useT();
-  const [tab, setTab] = useState<"habits" | "tasks" | "stats" | "activity" | "members">("habits");
+  const [tab, setTab] = useState<Tab>("habits");
   const [habitName, setHabitName] = useState("");
   const [memberName, setMemberName] = useState("");
   const [taskName, setTaskName] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
-  const isOwner = detail.owner_id === user.id;
+  const canManage = detail.my_role === "owner" || detail.my_role === "admin";
+  const isOwner = detail.my_role === "owner";
   const today = ymd(new Date());
   const week = weekDaysSoFar();
   const nameOf = (uid: string | null) =>
@@ -222,7 +267,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
     e.preventDefault();
     if (!taskName.trim()) return;
     try {
-      await api.createGroupTask(detail.id, taskName.trim());
+      await api.createGroupTask(detail.id, { title: taskName.trim() });
       setTaskName("");
       onChanged();
     } catch (e: any) {
@@ -242,6 +287,15 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
   const deleteTask = async (tid: string) => {
     try {
       await api.deleteGroupTask(tid);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const assignTask = async (tid: string, uid: string | null) => {
+    try {
+      await api.updateGroupTask(tid, { assigned_to: uid });
       onChanged();
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -270,6 +324,25 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
     }
   };
 
+  const setRole = async (uid: string, role: GroupRole) => {
+    try {
+      await api.setGroupMemberRole(detail.id, uid, role);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const nudge = async (uid: string) => {
+    try {
+      await api.nudgeMember(detail.id, uid);
+      setError(null);
+      alert(t("groups.nudgeSent"));
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
   const [copied, setCopied] = useState(false);
   const copyCode = async () => {
     try {
@@ -278,6 +351,16 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
       setTimeout(() => setCopied(false), 1500);
     } catch {
       /* clipboard yo'q — e'tiborsiz qoldiramiz */
+    }
+  };
+
+  const regenCode = async () => {
+    if (!confirm(t("groups.regenConfirm"))) return;
+    try {
+      await api.regenerateGroupCode(detail.id);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
     }
   };
 
@@ -299,35 +382,31 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
     const h = detail.habits.find((x) => x.id === hid)!;
     return (h.entries[user.id] ?? []).includes(today);
   };
+  // Joriy foydalanuvchining shu odatdagi seriyasi (streak)
+  const myStreak = (hid: string) => {
+    const h = detail.habits.find((x) => x.id === hid)!;
+    return currentStreak(new Set(h.entries[user.id] ?? []));
+  };
 
   // --- Statistika hisoblari ---
-  // Har a'zo uchun shu haftadagi bajarishlar soni (barcha odatlar bo'yicha)
-  const leaderboard = detail.members
-    .map((m) => {
+  const nDays = (days: string[]) =>
+    detail.members.map((m) => {
       let count = 0;
       for (const h of detail.habits) {
-        const days = new Set(h.entries[m.user_id] ?? []);
-        for (const d of week) if (days.has(d)) count++;
+        const set = new Set(h.entries[m.user_id] ?? []);
+        for (const d of days) if (set.has(d)) count++;
       }
       return { ...m, count };
-    })
-    .sort((a, b) => b.count - a.count);
+    });
 
-  const possible = detail.members.length * detail.habits.length * week.length;
-  const totalDone = leaderboard.reduce((s, m) => s + m.count, 0);
+  const week1 = week;
+  const totalDone = nDays(week1).reduce((s, m) => s + m.count, 0);
+  const possible = detail.members.length * detail.habits.length * week1.length;
   const rate = possible ? Math.round((totalDone / possible) * 100) : 0;
-  const maxCount = leaderboard[0]?.count || 1;
 
   // O'tgan hafta bilan solishtirish
   const prevWeek = prevWeekDays();
-  const prevTotal = detail.members.reduce((sum, m) => {
-    let c = 0;
-    for (const h of detail.habits) {
-      const days = new Set(h.entries[m.user_id] ?? []);
-      for (const d of prevWeek) if (days.has(d)) c++;
-    }
-    return sum + c;
-  }, 0);
+  const prevTotal = nDays(prevWeek).reduce((s, m) => s + m.count, 0);
   const delta = totalDone - prevTotal;
 
   return (
@@ -335,13 +414,16 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
       <div className="page-head">
         <div className="gd-title">
           <button className="btn-back" onClick={onBack}>{t("groups.back")}</button>
-          <h2>{detail.name}</h2>
+          <h2>
+            <span className="group-emoji">{detail.emoji}</span> {detail.name}
+          </h2>
         </div>
         <button className="gd-code" onClick={copyCode} title={t("groups.copyTitle")}>
           🔑 {detail.invite_code}
           <span className="gd-code-hint">{copied ? t("groups.copied") : t("groups.copyHint")}</span>
         </button>
       </div>
+      {detail.description && <p className="gd-desc">{detail.description}</p>}
 
       {error && <div className="error-bar" onClick={() => setError(null)}>⚠️ {error}</div>}
 
@@ -350,6 +432,8 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
         <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
           {t("groups.tabTasks")} ({detail.tasks.filter((task) => !task.done).length})
         </button>
+        <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>{t("groups.tabChat")}</button>
+        <button className={tab === "challenges" ? "active" : ""} onClick={() => setTab("challenges")}>{t("groups.tabChallenges")}</button>
         <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>{t("groups.tabStats")}</button>
         <button className={tab === "activity" ? "active" : ""} onClick={() => setTab("activity")}>{t("groups.tabActivity")}</button>
         <button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
@@ -369,13 +453,21 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
           {detail.habits.map((h) => {
             const dt = doneToday(h.id);
             const mine = iDidToday(h.id);
+            const streak = myStreak(h.id);
+            // Shu haftadagi jamoaviy bajarish (target progressi)
+            const weekDone = detail.members.reduce((s, m) => {
+              const set = new Set(h.entries[m.user_id] ?? []);
+              return s + week.filter((d) => set.has(d)).length;
+            }, 0);
+            const weekTarget = h.target_per_week * detail.members.length;
             return (
               <div key={h.id} className="gh-card">
                 <div className="gh-head">
                   <span className="habit-dot" style={{ background: h.color }} />
                   <span className="gh-name">{h.name}</span>
+                  {streak > 0 && <span className="gh-streak" title={t("groups.streakDays", { n: streak })}>🔥 {streak}</span>}
                   <span className="gh-today">{t("groups.today", { done: dt, total: detail.members.length })}</span>
-                  {isOwner && (
+                  {canManage && (
                     <button className="habit-del" onClick={() => deleteHabit(h.id)} title={t("common.delete")}>×</button>
                   )}
                 </div>
@@ -384,6 +476,9 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                     className="gh-bar-fill"
                     style={{ width: `${(dt / Math.max(1, detail.members.length)) * 100}%`, background: h.color }}
                   />
+                </div>
+                <div className="gh-target">
+                  {t("groups.targetProgress", { done: weekDone, target: weekTarget })}
                 </div>
                 <div className="gh-row">
                   <div className="gh-members">
@@ -451,6 +546,22 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                   {task.done ? "✓" : ""}
                 </button>
                 <span className="gtask-title">{task.title}</span>
+                {task.due_date && (
+                  <span className="gtask-due">
+                    📅 {new Date(task.due_date).toLocaleDateString(getLang(), { day: "numeric", month: "short" })}
+                  </span>
+                )}
+                <select
+                  className="gtask-assign"
+                  value={task.assigned_to ?? ""}
+                  onChange={(e) => assignTask(task.id, e.target.value || null)}
+                  title={t("groups.assignTo")}
+                >
+                  <option value="">{t("groups.unassigned")}</option>
+                  {detail.members.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>{m.username}</option>
+                  ))}
+                </select>
                 {task.done && task.done_by && (
                   <span className="gtask-by">— {nameOf(task.done_by)}</span>
                 )}
@@ -459,6 +570,14 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
             ))}
           </div>
         </div>
+      )}
+
+      {/* ---- Chat ---- */}
+      {tab === "chat" && <ChatTab detail={detail} user={user} onChanged={onChanged} setError={setError} />}
+
+      {/* ---- Challenge'lar ---- */}
+      {tab === "challenges" && (
+        <ChallengesTab detail={detail} canManage={canManage} onChanged={onChanged} setError={setError} />
       )}
 
       {/* ---- Faoliyat (bildirishnoma tasmasi) ---- */}
@@ -485,70 +604,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
 
       {/* ---- Statistika ---- */}
       {tab === "stats" && (
-        <div className="gd-section">
-          <div className="stat-tiles">
-            <div className="stat-tile">
-              <div className="stat-num">{rate}%</div>
-              <div className="stat-label">{t("groups.rateLabel")}</div>
-            </div>
-            <div className="stat-tile">
-              <div className="stat-num">{totalDone}</div>
-              <div className="stat-label">{t("groups.totalWeek")}</div>
-            </div>
-            <div className="stat-tile">
-              <div className="stat-num">{detail.habits.length}</div>
-              <div className="stat-label">{t("groups.groupHabits")}</div>
-            </div>
-          </div>
-
-          <div className="week-summary">
-            <span>{t("groups.weekSummary")}</span>
-            <span className="ws-cur">{t("groups.thisWeekN", { n: totalDone })}</span>
-            <span className="ws-prev">{t("groups.prevWeekN", { n: prevTotal })}</span>
-            {delta !== 0 && (
-              <span className={`ws-delta ${delta > 0 ? "up" : "down"}`}>
-                {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
-              </span>
-            )}
-            {delta === 0 && <span className="ws-delta">{t("groups.equal")}</span>}
-          </div>
-
-          <h3 className="stat-h">{t("groups.leaderboard")}</h3>
-          <div className="leaderboard">
-            {leaderboard.map((m, i) => (
-              <div key={m.user_id} className="lb-row">
-                <span className="lb-rank">{i + 1}</span>
-                <span className="avatar sm">{m.username.charAt(0).toUpperCase()}</span>
-                <span className="lb-name">
-                  {m.username}
-                  {m.user_id === user.id && ` ${t("groups.you")}`}
-                </span>
-                <div className="lb-bar">
-                  <div className="lb-bar-fill" style={{ width: `${(m.count / maxCount) * 100}%` }} />
-                </div>
-                <span className="lb-count">{m.count}</span>
-              </div>
-            ))}
-          </div>
-
-          <h3 className="stat-h">{t("groups.todayStatus")}</h3>
-          <div className="stat-list">
-            {detail.habits.map((h) => {
-              const dt = doneToday(h.id);
-              return (
-                <div key={h.id} className="stat-hrow">
-                  <span className="habit-dot" style={{ background: h.color }} />
-                  <span className="stat-hname">{h.name}</span>
-                  <div className="gh-bar">
-                    <div className="gh-bar-fill" style={{ width: `${(dt / Math.max(1, detail.members.length)) * 100}%`, background: h.color }} />
-                  </div>
-                  <span className="stat-hcount">{dt}/{detail.members.length}</span>
-                </div>
-              );
-            })}
-            {detail.habits.length === 0 && <div className="empty">{t("groups.noHabit")}</div>}
-          </div>
-        </div>
+        <StatsTab detail={detail} user={user} rate={rate} totalDone={totalDone} prevTotal={prevTotal} delta={delta} />
       )}
 
       {/* ---- A'zolar ---- */}
@@ -570,19 +626,39 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                 <span className="avatar sm">{m.username.charAt(0).toUpperCase()}</span>
                 <span className="member-name">{m.username}</span>
                 {m.role === "owner" && <span className="member-badge">{t("groups.badgeOwner")}</span>}
+                {m.role === "admin" && <span className="member-badge admin">{t("groups.badgeAdmin")}</span>}
                 {m.user_id === user.id && <span className="member-you">{t("groups.youBadge")}</span>}
+                {m.user_id !== user.id && (
+                  <button className="member-nudge" onClick={() => nudge(m.user_id)} title={t("groups.nudgeTitle")}>👉</button>
+                )}
                 {isOwner && m.role !== "owner" && m.user_id !== user.id && (
-                  <button
-                    className="member-kick"
-                    title={t("groups.kickTitle")}
-                    onClick={() => removeMember(m.user_id)}
-                  >
-                    ×
-                  </button>
+                  <>
+                    {m.role === "member" ? (
+                      <button className="member-role" onClick={() => setRole(m.user_id, "admin")} title={t("groups.makeAdmin")}>⬆️</button>
+                    ) : (
+                      <button className="member-role" onClick={() => setRole(m.user_id, "member")} title={t("groups.removeAdmin")}>⬇️</button>
+                    )}
+                    <button
+                      className="member-role"
+                      onClick={() => confirm(t("groups.transferConfirm", { name: m.username })) && setRole(m.user_id, "owner")}
+                      title={t("groups.makeOwner")}
+                    >👑</button>
+                    <button
+                      className="member-kick"
+                      title={t("groups.kickTitle")}
+                      onClick={() => removeMember(m.user_id)}
+                    >×</button>
+                  </>
                 )}
               </div>
             ))}
           </div>
+
+          {canManage && <ProfileEditor detail={detail} onChanged={onChanged} setError={setError} />}
+
+          {isOwner && (
+            <button className="btn-secondary gd-regen" onClick={regenCode}>{t("groups.regenCode")}</button>
+          )}
 
           <div className="gd-danger">
             {!confirmDel ? (
@@ -601,5 +677,404 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
         </div>
       )}
     </div>
+  );
+}
+
+// ---------- Chat tab ----------
+
+function ChatTab({
+  detail,
+  user,
+  onChanged,
+  setError,
+}: {
+  detail: GroupDetail;
+  user: User;
+  onChanged: () => void;
+  setError: (s: string | null) => void;
+}) {
+  const t = useT();
+  const [text, setText] = useState("");
+  const endRef = useRef<HTMLDivElement>(null);
+  const canModerate = detail.my_role === "owner" || detail.my_role === "admin";
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [detail.messages.length]);
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    try {
+      await api.sendGroupMessage(detail.id, text.trim());
+      setText("");
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const del = async (mid: string) => {
+    try {
+      await api.deleteGroupMessage(mid);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  return (
+    <div className="gd-section chat-tab">
+      <div className="chat-messages">
+        {detail.messages.length === 0 && <div className="empty">{t("groups.noMessages")}</div>}
+        {detail.messages.map((m) => {
+          const mine = m.user_id === user.id;
+          return (
+            <div key={m.id} className={`chat-msg ${mine ? "mine" : ""}`}>
+              {!mine && <span className="chat-author">{m.username}</span>}
+              <span className="chat-text">{m.text}</span>
+              <span className="chat-time">
+                {new Date(m.created_at).toLocaleTimeString(getLang(), { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              {(mine || canModerate) && (
+                <button className="chat-del" onClick={() => del(m.id)} title={t("common.delete")}>×</button>
+              )}
+            </div>
+          );
+        })}
+        <div ref={endRef} />
+      </div>
+      <form className="chat-form" onSubmit={send}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={t("groups.chatPlaceholder")} maxLength={1000} />
+        <button type="submit" className="btn-primary">{t("groups.sendMsg")}</button>
+      </form>
+    </div>
+  );
+}
+
+// ---------- Challenge tab ----------
+
+function ChallengesTab({
+  detail,
+  canManage,
+  onChanged,
+  setError,
+}: {
+  detail: GroupDetail;
+  canManage: boolean;
+  onChanged: () => void;
+  setError: (s: string | null) => void;
+}) {
+  const t = useT();
+  const [title, setTitle] = useState("");
+  const [start, setStart] = useState(ymd(new Date()));
+  const [end, setEnd] = useState(ymd(new Date(Date.now() + 7 * 86400000)));
+  const todayStr = ymd(new Date());
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      await api.createChallenge(detail.id, { title: title.trim(), start_date: start, end_date: end });
+      setTitle("");
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  const del = async (cid: string) => {
+    try {
+      await api.deleteChallenge(cid);
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  // Challenge davomidagi bajarishlar bo'yicha reyting
+  const scores = (startD: string, endD: string) => {
+    const days: string[] = [];
+    for (let d = new Date(startD); ymd(d) <= endD && ymd(d) <= todayStr; d.setDate(d.getDate() + 1)) {
+      days.push(ymd(d));
+    }
+    return detail.members
+      .map((m) => {
+        let count = 0;
+        for (const h of detail.habits) {
+          const set = new Set(h.entries[m.user_id] ?? []);
+          for (const d of days) if (set.has(d)) count++;
+        }
+        return { ...m, count };
+      })
+      .sort((a, b) => b.count - a.count);
+  };
+
+  const daysLeft = (endD: string) =>
+    Math.max(0, Math.ceil((new Date(endD).getTime() - new Date(todayStr).getTime()) / 86400000));
+
+  return (
+    <div className="gd-section">
+      {canManage && (
+        <form className="challenge-form" onSubmit={add}>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("groups.challengeTitle")} />
+          <div className="row">
+            <label>{t("groups.challengeStart")}<input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+            <label>{t("groups.challengeEnd")}<input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+          </div>
+          <button type="submit" className="btn-primary">{t("groups.challengeCreate")}</button>
+        </form>
+      )}
+
+      {detail.challenges.length === 0 && <div className="empty">{t("groups.noChallenges")}</div>}
+      {detail.challenges.map((c) => {
+        const status =
+          todayStr < c.start_date ? "upcoming" : todayStr > c.end_date ? "ended" : "active";
+        const board = scores(c.start_date, c.end_date);
+        const leader = board[0];
+        const max = board[0]?.count || 1;
+        return (
+          <div key={c.id} className={`challenge-card ${status}`}>
+            <div className="challenge-head">
+              <span className="challenge-name">🏁 {c.title}</span>
+              <span className={`challenge-status ${status}`}>
+                {status === "active" && t("groups.daysLeft", { n: daysLeft(c.end_date) })}
+                {status === "upcoming" && t("groups.challengeUpcoming")}
+                {status === "ended" && t("groups.challengeEnded")}
+              </span>
+              {canManage && <button className="habit-del" onClick={() => del(c.id)} title={t("common.delete")}>×</button>}
+            </div>
+            <div className="challenge-dates">
+              {new Date(c.start_date).toLocaleDateString(getLang(), { day: "numeric", month: "short" })} –{" "}
+              {new Date(c.end_date).toLocaleDateString(getLang(), { day: "numeric", month: "short" })}
+            </div>
+            {leader && status !== "upcoming" && (
+              <div className="challenge-leader">
+                {status === "ended" ? "🏆" : "🥇"} {t("groups.challengeLeader", { name: leader.username, n: leader.count })}
+              </div>
+            )}
+            {status !== "upcoming" && (
+              <div className="leaderboard mini">
+                {board.slice(0, 5).map((m, i) => (
+                  <div key={m.user_id} className="lb-row">
+                    <span className="lb-rank">{i + 1}</span>
+                    <span className="lb-name">{m.username}</span>
+                    <div className="lb-bar"><div className="lb-bar-fill" style={{ width: `${(m.count / max) * 100}%` }} /></div>
+                    <span className="lb-count">{m.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Statistika tab (leaderboard davrlari + heatmap + badge) ----------
+
+function StatsTab({
+  detail,
+  user,
+  rate,
+  totalDone,
+  prevTotal,
+  delta,
+}: {
+  detail: GroupDetail;
+  user: User;
+  rate: number;
+  totalDone: number;
+  prevTotal: number;
+  delta: number;
+}) {
+  const t = useT();
+  const [period, setPeriod] = useState<"week" | "month" | "all">("week");
+  const today = ymd(new Date());
+
+  const periodDays = period === "week" ? 7 : period === "month" ? 30 : 90;
+  const days = lastNDays(periodDays);
+
+  const leaderboard = detail.members
+    .map((m) => {
+      let count = 0;
+      let best = 0;
+      for (const h of detail.habits) {
+        const set = new Set(h.entries[m.user_id] ?? []);
+        for (const d of days) if (set.has(d)) count++;
+        best = Math.max(best, currentStreak(set));
+      }
+      return { ...m, count, streak: best };
+    })
+    .sort((a, b) => b.count - a.count);
+  const maxCount = leaderboard[0]?.count || 1;
+
+  // Badge (yutuq) hisoblari — joriy foydalanuvchi uchun
+  const myBest = leaderboard.find((m) => m.user_id === user.id)?.streak ?? 0;
+  const iAmTop = leaderboard[0]?.user_id === user.id && (leaderboard[0]?.count ?? 0) > 0;
+  const week = weekDaysSoFar();
+  const perfectWeek =
+    detail.habits.length > 0 &&
+    detail.habits.every((h) => {
+      const set = new Set(h.entries[user.id] ?? []);
+      return week.every((d) => set.has(d));
+    });
+  const badges: { icon: string; label: string }[] = [];
+  if (myBest >= 30) badges.push({ icon: "💎", label: t("groups.badgeStreak30") });
+  else if (myBest >= 7) badges.push({ icon: "🔥", label: t("groups.badgeStreak7") });
+  if (perfectWeek) badges.push({ icon: "💯", label: t("groups.badgePerfectWeek") });
+  if (iAmTop) badges.push({ icon: "🥇", label: t("groups.badgeTopWeek") });
+
+  // Guruh heatmap'i — oxirgi 90 kun, kunlik bajarish zichligi
+  const heatDays = lastNDays(91);
+  const perDay = (d: string) => {
+    let c = 0;
+    for (const h of detail.habits) {
+      for (const m of detail.members) {
+        if ((h.entries[m.user_id] ?? []).includes(d)) c++;
+      }
+    }
+    return c;
+  };
+  const heatMax = Math.max(1, ...heatDays.map(perDay));
+
+  const doneToday = (hid: string) => {
+    const h = detail.habits.find((x) => x.id === hid)!;
+    return detail.members.filter((m) => (h.entries[m.user_id] ?? []).includes(today)).length;
+  };
+
+  return (
+    <div className="gd-section">
+      <div className="stat-tiles">
+        <div className="stat-tile">
+          <div className="stat-num">{rate}%</div>
+          <div className="stat-label">{t("groups.rateLabel")}</div>
+        </div>
+        <div className="stat-tile">
+          <div className="stat-num">{totalDone}</div>
+          <div className="stat-label">{t("groups.totalWeek")}</div>
+        </div>
+        <div className="stat-tile">
+          <div className="stat-num">{detail.habits.length}</div>
+          <div className="stat-label">{t("groups.groupHabits")}</div>
+        </div>
+      </div>
+
+      {badges.length > 0 && (
+        <>
+          <h3 className="stat-h">{t("groups.badges")}</h3>
+          <div className="badge-row">
+            {badges.map((b, i) => (
+              <span key={i} className="badge-chip" title={b.label}>{b.icon} {b.label}</span>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="week-summary">
+        <span>{t("groups.weekSummary")}</span>
+        <span className="ws-cur">{t("groups.thisWeekN", { n: totalDone })}</span>
+        <span className="ws-prev">{t("groups.prevWeekN", { n: prevTotal })}</span>
+        {delta !== 0 && (
+          <span className={`ws-delta ${delta > 0 ? "up" : "down"}`}>
+            {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
+          </span>
+        )}
+        {delta === 0 && <span className="ws-delta">{t("groups.equal")}</span>}
+      </div>
+
+      <div className="stat-head-row">
+        <h3 className="stat-h">{t("groups.leaderboard")}</h3>
+        <div className="seg sm">
+          <button className={period === "week" ? "active" : ""} onClick={() => setPeriod("week")}>{t("groups.periodWeek")}</button>
+          <button className={period === "month" ? "active" : ""} onClick={() => setPeriod("month")}>{t("groups.periodMonth")}</button>
+          <button className={period === "all" ? "active" : ""} onClick={() => setPeriod("all")}>{t("groups.periodAll")}</button>
+        </div>
+      </div>
+      <div className="leaderboard">
+        {leaderboard.map((m, i) => (
+          <div key={m.user_id} className="lb-row">
+            <span className="lb-rank">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
+            <span className="avatar sm">{m.username.charAt(0).toUpperCase()}</span>
+            <span className="lb-name">
+              {m.username}
+              {m.user_id === user.id && ` ${t("groups.you")}`}
+              {m.streak > 0 && <span className="lb-streak"> 🔥{m.streak}</span>}
+            </span>
+            <div className="lb-bar">
+              <div className="lb-bar-fill" style={{ width: `${(m.count / maxCount) * 100}%` }} />
+            </div>
+            <span className="lb-count">{m.count}</span>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="stat-h">{t("groups.last90")}</h3>
+      <div className="heatmap">
+        {heatDays.map((d) => {
+          const v = perDay(d);
+          const intensity = v === 0 ? 0 : Math.ceil((v / heatMax) * 4);
+          return <span key={d} className={`heat-cell h${intensity}`} title={`${d}: ${v}`} />;
+        })}
+      </div>
+
+      <h3 className="stat-h">{t("groups.todayStatus")}</h3>
+      <div className="stat-list">
+        {detail.habits.map((h) => {
+          const dt = doneToday(h.id);
+          return (
+            <div key={h.id} className="stat-hrow">
+              <span className="habit-dot" style={{ background: h.color }} />
+              <span className="stat-hname">{h.name}</span>
+              <div className="gh-bar">
+                <div className="gh-bar-fill" style={{ width: `${(dt / Math.max(1, detail.members.length)) * 100}%`, background: h.color }} />
+              </div>
+              <span className="stat-hcount">{dt}/{detail.members.length}</span>
+            </div>
+          );
+        })}
+        {detail.habits.length === 0 && <div className="empty">{t("groups.noHabit")}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Profil tahriri ----------
+
+function ProfileEditor({
+  detail,
+  onChanged,
+  setError,
+}: {
+  detail: GroupDetail;
+  onChanged: () => void;
+  setError: (s: string | null) => void;
+}) {
+  const t = useT();
+  const [name, setName] = useState(detail.name);
+  const [emoji, setEmoji] = useState(detail.emoji);
+  const [description, setDescription] = useState(detail.description);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.updateGroup(detail.id, { name, emoji, description });
+      onChanged();
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  return (
+    <form className="profile-editor" onSubmit={save}>
+      <h3 className="stat-h">{t("groups.editProfile")}</h3>
+      <div className="row">
+        <input className="emoji-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} title={t("groups.groupEmoji")} />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("groups.groupName")} />
+      </div>
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("groups.descPlaceholder")} maxLength={500} rows={2} />
+      <button type="submit" className="btn-secondary">{t("groups.saveProfile")}</button>
+    </form>
   );
 }
