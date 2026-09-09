@@ -1,5 +1,6 @@
 # Rust build artefaktlari
 target
+backend/target
 
 # Frontend
 frontend/node_modules
@@ -9,6 +10,7 @@ frontend/dist
 .pg
 .direnv
 .env
+backend/.env
 *.log
 
 # Git va hujjatlar

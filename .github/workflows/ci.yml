@@ -9,6 +9,9 @@ jobs:
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v5
       - name: Rust toolchain o'rnatish
@@ -16,6 +19,8 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
       - name: Format tekshirish
         run: cargo fmt --all --check
       - name: Clippy

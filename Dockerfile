@@ -26,15 +26,15 @@ FROM rust:1-bookworm AS backend
 WORKDIR /app
 
 # Bog'liqliklarni keshlash: avval faqat manifest, so'ng bo'sh main bilan qurish
-COPY Cargo.toml Cargo.lock ./
+COPY backend/Cargo.toml backend/Cargo.lock ./
 RUN mkdir src && echo 'fn main() {}' > src/main.rs \
     && cargo build --release \
     && rm -rf src
 
 # Haqiqiy manba kodi va migratsiyalar
 # (migratsiyalar `sqlx::migrate!` orqali binarga compile vaqtida joylanadi)
-COPY src ./src
-COPY migrations ./migrations
+COPY backend/src ./src
+COPY backend/migrations ./migrations
 # main.rs vaqtini yangilaymiz, aks holda cargo qayta qurmaydi
 RUN touch src/main.rs && cargo build --release
 

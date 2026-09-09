@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "▶️  Backend (http://127.0.0.1:3000)…"
-cargo run &
+( cd backend && cargo run ) &
 BACK_PID=$!
 
 echo "▶️  Frontend (http://localhost:5173)…"

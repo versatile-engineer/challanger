@@ -15,7 +15,7 @@ setup:
 # ▶️  Faqat backend (http://127.0.0.1:3000)
 back:
     scripts/pg.sh start
-    cargo run
+    cd backend && cargo run
 
 # ▶️  Faqat frontend (http://localhost:5173)
 front:
@@ -47,21 +47,21 @@ db-reset:
 
 # Butun loyihani qurish (backend + frontend)
 build:
-    cargo build
+    cd backend && cargo build
     cd frontend && pnpm build
 
 # Rust: format + clippy + test
 check:
-    cargo fmt --check
-    cargo clippy -- -D warnings
-    cargo test
+    cd backend && cargo fmt --check
+    cd backend && cargo clippy -- -D warnings
+    cd backend && cargo test
 
 # Kodni formatlash
 fmt:
-    cargo fmt
+    cd backend && cargo fmt
     cd frontend && pnpm exec tsc -b
 
 # Qurilma fayllarini tozalash
 clean:
-    cargo clean
+    cd backend && cargo clean
     rm -rf frontend/dist frontend/node_modules/.vite

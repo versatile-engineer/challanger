@@ -6,7 +6,7 @@ vazifa boshqaruvchi.
 ## Imkoniyatlar
 
 - 🔐 Autentifikatsiya — ro'yxatdan o'tish (username + email + parol) va kirish (email + parol); qisqa muddatli **access token** + aylanuvchi **refresh token** (avtomatik yangilanadi), auth'ga **rate limiting** (brute-force himoyasi)
-- 🌐 **Ko'p tillilik (i18n)** — O'zbekcha / English (Sozlamalardan almashtiriladi)
+- 🌐 **Ko'p tillilik (i18n)** — O'zbekcha / English / Русский (Sozlamalardan almashtiriladi)
 - ✅ Vazifalar CRUD — sarlavha, izoh, muddat (due), prioritet (0–3), holat
 - 🔍 **Qidiruv va filtrlar** — matn, teg, prioritet bo'yicha; server tomonda pagination
 - 🖱️ **Drag-and-drop tartiblash** — "Qo'lda" rejimda vazifalarni sichqoncha bilan qayta tartiblash
@@ -66,9 +66,9 @@ scripts/dev.sh
 ### Alohida ishga tushirish
 
 ```bash
-scripts/pg.sh init      # bazani birinchi marta yaratish (keyin: start/stop/psql/reset)
-cargo run               # backend
-cd frontend && pnpm dev # frontend
+scripts/pg.sh init          # bazani birinchi marta yaratish (keyin: start/stop/psql/reset)
+cd backend && cargo run     # backend
+cd frontend && pnpm dev     # frontend
 ```
 
 ## Ma'lumotlar bazasi
@@ -83,7 +83,7 @@ scripts/pg.sh psql      # SQL konsoli
 scripts/pg.sh reset     # o'chirib qayta yaratish
 ```
 
-Migratsiyalar backend ishga tushganda avtomatik qo'llanadi (`migrations/`).
+Migratsiyalar backend ishga tushganda avtomatik qo'llanadi (`backend/migrations/`).
 
 ## Docker bilan deploy (prod)
 
@@ -110,7 +110,7 @@ Fayllar: `Dockerfile` (3 bosqichli: frontend → backend → runtime), `docker-c
 Bot vazifa eslatmalarini Telegram'ga xabar sifatida yuboradi. Sozlash uch qadam:
 
 1. **Bot yarating** — Telegram'da [@BotFather](https://t.me/BotFather) → `/newbot` → tokenni oling.
-2. **`.env` ga qo'shing**:
+2. **`backend/.env` ga qo'shing**:
    ```bash
    TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
    ```
@@ -163,12 +163,12 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | POST   | `/telegram/link`         | Bir martalik bog'lash kodi + deep-link qaytaradi |
 | POST   | `/telegram/unlink`       | Hisobni Telegram'dan uzadi |
 
-> Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa (`/groups*`) yo'llari ham mavjud — kod: `src/routes/`.
+> Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa (`/groups*`) yo'llari ham mavjud — kod: `backend/src/routes/`.
 
 ## Sinov (testlar)
 
 ```bash
-cargo test                       # backend unit-testlar
+cd backend && cargo test         # backend unit-testlar
 cd frontend && pnpm test         # frontend (Vitest) testlar
 ```
 
@@ -179,4 +179,4 @@ CI: har push/PR'da `cargo fmt/clippy/test` va frontend `tsc/test/build` ishga tu
 
 - Fayl/rasm biriktirish (attachments)
 - Offline navbat (offline'da qo'shilgan vazifalarni ulanish tiklanganda yuborish)
-- i18n lug'atini kengaytirish (hozircha shell tarjima qilingan — `frontend/src/i18n.ts` kalitlariga qo'shib boring)
+- Yangi til qo'shish (butun UI tarjima qilingan — `frontend/src/i18n.ts` da `Lang` ga qo'shib, lug'at bering)
