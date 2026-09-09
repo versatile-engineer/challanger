@@ -48,7 +48,8 @@ impl WebPush {
                 return None;
             }
         };
-        let public_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(partial.get_public_key());
+        let public_b64 =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(partial.get_public_key());
         let subject =
             std::env::var("VAPID_SUBJECT").unwrap_or_else(|_| "mailto:admin@challanger.app".into());
 
@@ -73,7 +74,8 @@ impl WebPush {
         payload: &[u8],
     ) -> Result<bool, ()> {
         let info = SubscriptionInfo::new(endpoint, p256dh, auth);
-        let mut sig = VapidSignatureBuilder::from_base64(&self.private_b64, &info).map_err(|_| ())?;
+        let mut sig =
+            VapidSignatureBuilder::from_base64(&self.private_b64, &info).map_err(|_| ())?;
         sig.add_claim("sub", self.subject.as_str());
         let signature = sig.build().map_err(|_| ())?;
 
@@ -161,7 +163,9 @@ async fn subscribe(
         return Err(AppError::NotFound);
     }
     if body.endpoint.trim().is_empty() || body.keys.p256dh.is_empty() || body.keys.auth.is_empty() {
-        return Err(AppError::BadRequest("obuna ma'lumotlari to'liq emas".into()));
+        return Err(AppError::BadRequest(
+            "obuna ma'lumotlari to'liq emas".into(),
+        ));
     }
     sqlx::query(
         "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)

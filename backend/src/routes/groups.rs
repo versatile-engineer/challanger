@@ -222,7 +222,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/groups", get(list_groups).post(create_group))
         .route("/groups/join", post(join_group))
-        .route("/groups/{id}", get(get_group).patch(update_group).delete(delete_group))
+        .route(
+            "/groups/{id}",
+            get(get_group).patch(update_group).delete(delete_group),
+        )
         .route("/groups/{id}/regenerate", post(regenerate_code))
         .route("/groups/{id}/members", post(add_member))
         .route(
@@ -240,12 +243,21 @@ pub fn router() -> Router<AppState> {
         .route("/group-habits/{id}/toggle", post(toggle_group_habit))
         .route("/group-habits/{id}/react", post(react_group_habit))
         .route("/groups/{id}/tasks", post(create_group_task))
-        .route("/group-tasks/{id}", patch(update_group_task).delete(delete_group_task))
+        .route(
+            "/group-tasks/{id}",
+            patch(update_group_task).delete(delete_group_task),
+        )
         .route("/group-tasks/{id}/toggle", post(toggle_group_task))
         .route("/groups/{id}/messages", post(send_group_message))
-        .route("/group-messages/{id}", axum::routing::delete(delete_group_message))
+        .route(
+            "/group-messages/{id}",
+            axum::routing::delete(delete_group_message),
+        )
         .route("/groups/{id}/challenges", post(create_challenge))
-        .route("/group-challenges/{id}", axum::routing::delete(delete_challenge))
+        .route(
+            "/group-challenges/{id}",
+            axum::routing::delete(delete_challenge),
+        )
 }
 
 // ---------- Yordamchilar ----------
@@ -368,7 +380,11 @@ async fn update_group(
 ) -> AppResult<Json<serde_json::Value>> {
     require_manager(&st, id, user.id).await?;
     let name = match body.name {
-        Some(n) => Some(validate::required_text("guruh nomi", &n, validate::MAX_NAME)?),
+        Some(n) => Some(validate::required_text(
+            "guruh nomi",
+            &n,
+            validate::MAX_NAME,
+        )?),
         None => None,
     };
     // Emoji — 1..=8 belgi (bir nechta emoji ham bo'lishi mumkin).
@@ -419,18 +435,13 @@ async fn get_group(
 ) -> AppResult<Json<GroupDetail>> {
     let my_role = require_member(&st, id, user.id).await?;
 
-    let (name, emoji, description, invite_code, owner_id): (
-        String,
-        String,
-        String,
-        String,
-        Uuid,
-    ) = sqlx::query_as(
-        "SELECT name, emoji, description, invite_code, owner_id FROM groups WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&st.db)
-    .await?;
+    let (name, emoji, description, invite_code, owner_id): (String, String, String, String, Uuid) =
+        sqlx::query_as(
+            "SELECT name, emoji, description, invite_code, owner_id FROM groups WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&st.db)
+        .await?;
 
     let members = sqlx::query_as::<_, MemberInfo>(
         "SELECT gm.user_id, u.username, gm.role, gm.joined_at
@@ -757,7 +768,12 @@ async fn nudge(
     }
 
     let from = username_of(&st, user.id).await;
-    let text = match body.habit_name.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let text = match body
+        .habit_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(h) => format!("👉 {from} sizga turtki berdi: «{h}» ni bajaring!"),
         None => format!("👉 {from} sizga turtki berdi — odatlarni unutmang!"),
     };
@@ -1136,7 +1152,12 @@ async fn create_challenge(
     .fetch_one(&st.db)
     .await?;
     let uname = username_of(&st, user.id).await;
-    log_activity(&st, id, format!("🏁 {uname} yangi challenge boshladi: {}", row.title)).await;
+    log_activity(
+        &st,
+        id,
+        format!("🏁 {uname} yangi challenge boshladi: {}", row.title),
+    )
+    .await;
     Ok(Json(row))
 }
 
