@@ -7,13 +7,13 @@ mod validate;
 
 use std::sync::Arc;
 
-use axum::routing::get;
 use axum::Router;
-use sqlx::postgres::PgPoolOptions;
+use axum::routing::get;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
+use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
-use tower_governor::GovernorLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{CreateTask, ReorderTasks, Task, TaskQuery, UpdateTask};
-use crate::{validate, AppState};
+use crate::{AppState, validate};
 
 /// Berilgan `project_id` (agar bor bo'lsa) shu foydalanuvchiga tegishliligini tekshiradi.
 async fn ensure_project_owned(

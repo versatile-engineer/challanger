@@ -1,12 +1,12 @@
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()

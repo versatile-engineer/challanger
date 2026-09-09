@@ -5,9 +5,9 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/pomodoro", get(stats).post(record))

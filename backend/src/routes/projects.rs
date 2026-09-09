@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{CreateProject, Project, UpdateProject};
-use crate::{validate, AppState};
+use crate::{AppState, validate};
 
 pub fn router() -> Router<AppState> {
     Router::new()

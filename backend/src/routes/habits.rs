@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::{validate, AppState};
+use crate::{AppState, validate};
 
 #[derive(Debug, Serialize, FromRow)]
 struct HabitRow {

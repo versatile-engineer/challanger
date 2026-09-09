@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::{validate, AppState};
+use crate::{AppState, validate};
 
 // ---------- Modellar ----------
 
@@ -156,7 +156,10 @@ pub fn router() -> Router<AppState> {
         .route("/group-habits/{id}/react", post(react_group_habit))
         .route("/groups/{id}/tasks", post(create_group_task))
         .route("/group-tasks/{id}/toggle", post(toggle_group_task))
-        .route("/group-tasks/{id}", axum::routing::delete(delete_group_task))
+        .route(
+            "/group-tasks/{id}",
+            axum::routing::delete(delete_group_task),
+        )
 }
 
 // ---------- Yordamchilar ----------

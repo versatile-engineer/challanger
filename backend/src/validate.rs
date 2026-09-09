@@ -83,11 +83,7 @@ pub fn color(c: String) -> AppResult<String> {
 
 /// 'daily' yoki 'weekly' ga normallashtiradi (boshqa qiymatlar 'daily').
 pub fn frequency(f: &str) -> &'static str {
-    if f == "weekly" {
-        "weekly"
-    } else {
-        "daily"
-    }
+    if f == "weekly" { "weekly" } else { "daily" }
 }
 
 /// Odat belgisi uchun ruxsat etilgan kun: bugundan ±1 kun

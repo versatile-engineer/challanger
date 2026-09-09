@@ -12,9 +12,9 @@ use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
