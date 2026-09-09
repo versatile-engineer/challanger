@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Task } from "../types";
 import { PRIORITY_COLORS } from "../types";
+import { useT, monthName, weekdayShorts } from "../i18n";
 
 interface Props {
   tasks: Task[];
@@ -8,17 +9,13 @@ interface Props {
   onAddForDay: (dayISO: string) => void;
 }
 
-const MONTHS = [
-  "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-  "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
-];
-const WEEKDAYS = ["Du", "Se", "Cho", "Pa", "Ju", "Sha", "Ya"];
-
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function CalendarPage({ tasks, onSelectTask, onAddForDay }: Props) {
+  const t = useT();
+  const WEEKDAYS = weekdayShorts();
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
@@ -51,11 +48,11 @@ export function CalendarPage({ tasks, onSelectTask, onAddForDay }: Props) {
   return (
     <div className="page calendar-page">
       <div className="page-head">
-        <h2>{MONTHS[month]} {year}</h2>
+        <h2>{monthName(month)} {year}</h2>
         <div className="cal-nav">
           <button onClick={() => setCursor(new Date(year, month - 1, 1))}>‹</button>
           <button onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>
-            Bugun
+            {t("cal.today")}
           </button>
           <button onClick={() => setCursor(new Date(year, month + 1, 1))}>›</button>
         </div>
@@ -77,7 +74,7 @@ export function CalendarPage({ tasks, onSelectTask, onAddForDay }: Props) {
             <div key={i} className={`cal-cell ${isToday ? "today" : ""}`}>
               <div className="cal-daynum">
                 <span>{date.getDate()}</span>
-                <button className="cal-add" title="Vazifa qo'shish" onClick={() => onAddForDay(key)}>
+                <button className="cal-add" title={t("cal.addTask")} onClick={() => onAddForDay(key)}>
                   +
                 </button>
               </div>

@@ -31,15 +31,6 @@ export type Recurrence =
   | "yearly"
   | null;
 
-export const RECURRENCE_LABELS: Record<string, string> = {
-  daily: "Har kuni",
-  weekdays: "Ish kunlari",
-  weekly: "Har hafta",
-  biweekly: "2 haftada",
-  monthly: "Har oy",
-  yearly: "Har yil",
-};
-
 export interface Task {
   id: string;
   project_id: string | null;
@@ -128,13 +119,6 @@ export interface GroupDetail {
   tasks: GroupTask[];
   activity: GroupActivity[];
 }
-
-export const PRIORITY_LABELS: Record<number, string> = {
-  0: "Yo'q",
-  1: "Past",
-  2: "O'rta",
-  3: "Yuqori",
-};
 
 export const PRIORITY_COLORS: Record<number, string> = {
   0: "#94a3b8",

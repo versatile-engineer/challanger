@@ -1,5 +1,6 @@
 import type { Task } from "../types";
-import { PRIORITY_COLORS, RECURRENCE_LABELS } from "../types";
+import { PRIORITY_COLORS } from "../types";
+import { recurrenceLabel } from "../i18n";
 import { formatDue } from "../util";
 
 interface Props {
@@ -74,7 +75,7 @@ export function TaskItem({
         <div className="task-meta">
           {due.text && <span className={`due tone-${due.tone}`}>{due.text}</span>}
           {task.recurrence && (
-            <span className="recur">🔁 {RECURRENCE_LABELS[task.recurrence] ?? task.recurrence}</span>
+            <span className="recur">🔁 {recurrenceLabel(task.recurrence)}</span>
           )}
           {task.reminder_at && <span className="reminder">⏰</span>}
           {task.notes && <span className="has-notes">📝</span>}

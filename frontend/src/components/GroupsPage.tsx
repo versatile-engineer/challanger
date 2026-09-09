@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { GroupDetail, GroupSummary, User } from "../types";
+import { useT, getLang } from "../i18n";
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -30,6 +31,7 @@ function prevWeekDays(): string[] {
 }
 
 export function GroupsPage({ user }: { user: User }) {
+  const t = useT();
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GroupDetail | null>(null);
@@ -104,8 +106,8 @@ export function GroupsPage({ user }: { user: User }) {
   return (
     <div className="page groups-page">
       <div className="page-head">
-        <h2>Jamoa</h2>
-        <span className="page-hint">Odatlarni birga bajaring</span>
+        <h2>{t("groups.title")}</h2>
+        <span className="page-hint">{t("groups.hint")}</span>
       </div>
 
       {error && (
@@ -114,33 +116,33 @@ export function GroupsPage({ user }: { user: User }) {
 
       <div className="group-actions">
         <form onSubmit={createGroup} className="group-action-card">
-          <label>Yangi guruh yaratish</label>
+          <label>{t("groups.createNew")}</label>
           <div className="row">
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Guruh nomi" />
-            <button type="submit" className="btn-primary">Yaratish</button>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("groups.groupName")} />
+            <button type="submit" className="btn-primary">{t("groups.create")}</button>
           </div>
         </form>
         <form onSubmit={joinGroup} className="group-action-card">
-          <label>Taklif kodi bilan qo'shilish</label>
+          <label>{t("groups.joinWithCode")}</label>
           <div className="row">
             <input
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="Masalan: 2ECC26D9"
+              placeholder={t("groups.codePlaceholder")}
             />
-            <button type="submit" className="btn-secondary">Qo'shilish</button>
+            <button type="submit" className="btn-secondary">{t("groups.join")}</button>
           </div>
         </form>
       </div>
 
       <div className="group-list">
-        {groups.length === 0 && <div className="empty">Hali guruh yo'q. Yarating yoki qo'shiling 👥</div>}
+        {groups.length === 0 && <div className="empty">{t("groups.empty")}</div>}
         {groups.map((g) => (
           <button key={g.id} className="group-card" onClick={() => setSelectedId(g.id)}>
             <div className="group-card-main">
               <span className="group-name">{g.name}</span>
               <span className="group-meta">
-                {g.member_count} a'zo · {g.role === "owner" ? "egasi" : "a'zo"}
+                {t("groups.membersCount", { n: g.member_count })} · {g.role === "owner" ? t("groups.roleOwner") : t("groups.roleMember")}
               </span>
             </div>
             <span className="group-arrow">›</span>
@@ -164,6 +166,7 @@ interface DetailProps {
 }
 
 function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, setError, error }: DetailProps) {
+  const t = useT();
   const [tab, setTab] = useState<"habits" | "tasks" | "stats" | "activity" | "members">("habits");
   const [habitName, setHabitName] = useState("");
   const [memberName, setMemberName] = useState("");
@@ -331,26 +334,26 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
     <div className="page group-detail">
       <div className="page-head">
         <div className="gd-title">
-          <button className="btn-back" onClick={onBack}>‹ Guruhlar</button>
+          <button className="btn-back" onClick={onBack}>{t("groups.back")}</button>
           <h2>{detail.name}</h2>
         </div>
-        <button className="gd-code" onClick={copyCode} title="Nusxalash uchun bosing">
+        <button className="gd-code" onClick={copyCode} title={t("groups.copyTitle")}>
           🔑 {detail.invite_code}
-          <span className="gd-code-hint">{copied ? "nusxalandi ✓" : "nusxalash"}</span>
+          <span className="gd-code-hint">{copied ? t("groups.copied") : t("groups.copyHint")}</span>
         </button>
       </div>
 
       {error && <div className="error-bar" onClick={() => setError(null)}>⚠️ {error}</div>}
 
       <div className="seg gd-tabs">
-        <button className={tab === "habits" ? "active" : ""} onClick={() => setTab("habits")}>Odatlar</button>
+        <button className={tab === "habits" ? "active" : ""} onClick={() => setTab("habits")}>{t("groups.tabHabits")}</button>
         <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
-          Vazifalar ({detail.tasks.filter((t) => !t.done).length})
+          {t("groups.tabTasks")} ({detail.tasks.filter((task) => !task.done).length})
         </button>
-        <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Statistika</button>
-        <button className={tab === "activity" ? "active" : ""} onClick={() => setTab("activity")}>Faoliyat</button>
+        <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>{t("groups.tabStats")}</button>
+        <button className={tab === "activity" ? "active" : ""} onClick={() => setTab("activity")}>{t("groups.tabActivity")}</button>
         <button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
-          A'zolar ({detail.members.length})
+          {t("groups.tabMembers")} ({detail.members.length})
         </button>
       </div>
 
@@ -358,11 +361,11 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
       {tab === "habits" && (
         <div className="gd-section">
           <form className="habit-form-top gd-add" onSubmit={addHabit}>
-            <input value={habitName} onChange={(e) => setHabitName(e.target.value)} placeholder="+ Jamoaviy odat qo'shish" />
-            <button type="submit">Qo'shish</button>
+            <input value={habitName} onChange={(e) => setHabitName(e.target.value)} placeholder={t("groups.addHabit")} />
+            <button type="submit">{t("common.add")}</button>
           </form>
 
-          {detail.habits.length === 0 && <div className="empty">Hali jamoaviy odat yo'q 🔥</div>}
+          {detail.habits.length === 0 && <div className="empty">{t("groups.noHabits")}</div>}
           {detail.habits.map((h) => {
             const dt = doneToday(h.id);
             const mine = iDidToday(h.id);
@@ -371,9 +374,9 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                 <div className="gh-head">
                   <span className="habit-dot" style={{ background: h.color }} />
                   <span className="gh-name">{h.name}</span>
-                  <span className="gh-today">{dt}/{detail.members.length} bugun</span>
+                  <span className="gh-today">{t("groups.today", { done: dt, total: detail.members.length })}</span>
                   {isOwner && (
-                    <button className="habit-del" onClick={() => deleteHabit(h.id)} title="O'chirish">×</button>
+                    <button className="habit-del" onClick={() => deleteHabit(h.id)} title={t("common.delete")}>×</button>
                   )}
                 </div>
                 <div className="gh-bar">
@@ -403,7 +406,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                     style={mine ? { background: h.color, borderColor: h.color } : undefined}
                     onClick={() => toggleHabit(h.id)}
                   >
-                    {mine ? "✓ Bajarildi" : "Men bajardim"}
+                    {mine ? t("groups.done") : t("groups.iDid")}
                   </button>
                 </div>
                 <div className="gh-reactions">
@@ -415,7 +418,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                         key={emoji}
                         className={`reaction ${active ? "active" : ""}`}
                         onClick={() => react(h.id, emoji)}
-                        title="Reaksiya"
+                        title={t("groups.reactionTitle")}
                       >
                         {emoji}
                         {count > 0 && <span className="reaction-count">{count}</span>}
@@ -436,22 +439,22 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
             <input
               value={taskName}
               onChange={(e) => setTaskName(e.target.value)}
-              placeholder="+ Umumiy vazifa qo'shish"
+              placeholder={t("groups.addTask")}
             />
-            <button type="submit">Qo'shish</button>
+            <button type="submit">{t("common.add")}</button>
           </form>
-          {detail.tasks.length === 0 && <div className="empty">Hali umumiy vazifa yo'q ✅</div>}
+          {detail.tasks.length === 0 && <div className="empty">{t("groups.noTasks")}</div>}
           <div className="gtask-list">
-            {detail.tasks.map((t) => (
-              <div key={t.id} className={`gtask-row ${t.done ? "done" : ""}`}>
-                <button className="gtask-check" onClick={() => toggleTask(t.id)}>
-                  {t.done ? "✓" : ""}
+            {detail.tasks.map((task) => (
+              <div key={task.id} className={`gtask-row ${task.done ? "done" : ""}`}>
+                <button className="gtask-check" onClick={() => toggleTask(task.id)}>
+                  {task.done ? "✓" : ""}
                 </button>
-                <span className="gtask-title">{t.title}</span>
-                {t.done && t.done_by && (
-                  <span className="gtask-by">— {nameOf(t.done_by)}</span>
+                <span className="gtask-title">{task.title}</span>
+                {task.done && task.done_by && (
+                  <span className="gtask-by">— {nameOf(task.done_by)}</span>
                 )}
-                <button className="gtask-del" onClick={() => deleteTask(t.id)} title="O'chirish">×</button>
+                <button className="gtask-del" onClick={() => deleteTask(task.id)} title={t("common.delete")}>×</button>
               </div>
             ))}
           </div>
@@ -461,13 +464,13 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
       {/* ---- Faoliyat (bildirishnoma tasmasi) ---- */}
       {tab === "activity" && (
         <div className="gd-section">
-          {detail.activity.length === 0 && <div className="empty">Hali faoliyat yo'q 🔔</div>}
+          {detail.activity.length === 0 && <div className="empty">{t("groups.noActivity")}</div>}
           <div className="activity-feed">
             {detail.activity.map((a) => (
               <div key={a.id} className="activity-row">
                 <span className="activity-text">{a.text}</span>
                 <span className="activity-time">
-                  {new Date(a.created_at).toLocaleString("uz", {
+                  {new Date(a.created_at).toLocaleString(getLang(), {
                     day: "numeric",
                     month: "short",
                     hour: "2-digit",
@@ -486,31 +489,31 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
           <div className="stat-tiles">
             <div className="stat-tile">
               <div className="stat-num">{rate}%</div>
-              <div className="stat-label">Shu hafta bajarish darajasi</div>
+              <div className="stat-label">{t("groups.rateLabel")}</div>
             </div>
             <div className="stat-tile">
               <div className="stat-num">{totalDone}</div>
-              <div className="stat-label">Jami bajarishlar (hafta)</div>
+              <div className="stat-label">{t("groups.totalWeek")}</div>
             </div>
             <div className="stat-tile">
               <div className="stat-num">{detail.habits.length}</div>
-              <div className="stat-label">Jamoaviy odatlar</div>
+              <div className="stat-label">{t("groups.groupHabits")}</div>
             </div>
           </div>
 
           <div className="week-summary">
-            <span>📈 Haftalik xulosa:</span>
-            <span className="ws-cur">bu hafta {totalDone}</span>
-            <span className="ws-prev">o'tgan hafta {prevTotal}</span>
+            <span>{t("groups.weekSummary")}</span>
+            <span className="ws-cur">{t("groups.thisWeekN", { n: totalDone })}</span>
+            <span className="ws-prev">{t("groups.prevWeekN", { n: prevTotal })}</span>
             {delta !== 0 && (
               <span className={`ws-delta ${delta > 0 ? "up" : "down"}`}>
                 {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
               </span>
             )}
-            {delta === 0 && <span className="ws-delta">= barobar</span>}
+            {delta === 0 && <span className="ws-delta">{t("groups.equal")}</span>}
           </div>
 
-          <h3 className="stat-h">🏆 Reyting (shu hafta)</h3>
+          <h3 className="stat-h">{t("groups.leaderboard")}</h3>
           <div className="leaderboard">
             {leaderboard.map((m, i) => (
               <div key={m.user_id} className="lb-row">
@@ -518,7 +521,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                 <span className="avatar sm">{m.username.charAt(0).toUpperCase()}</span>
                 <span className="lb-name">
                   {m.username}
-                  {m.user_id === user.id && " (siz)"}
+                  {m.user_id === user.id && ` ${t("groups.you")}`}
                 </span>
                 <div className="lb-bar">
                   <div className="lb-bar-fill" style={{ width: `${(m.count / maxCount) * 100}%` }} />
@@ -528,7 +531,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
             ))}
           </div>
 
-          <h3 className="stat-h">📊 Bugungi holat</h3>
+          <h3 className="stat-h">{t("groups.todayStatus")}</h3>
           <div className="stat-list">
             {detail.habits.map((h) => {
               const dt = doneToday(h.id);
@@ -543,7 +546,7 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
                 </div>
               );
             })}
-            {detail.habits.length === 0 && <div className="empty">Odat yo'q</div>}
+            {detail.habits.length === 0 && <div className="empty">{t("groups.noHabit")}</div>}
           </div>
         </div>
       )}
@@ -556,9 +559,9 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
               <input
                 value={memberName}
                 onChange={(e) => setMemberName(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
-                placeholder="+ Username orqali a'zo qo'shish"
+                placeholder={t("groups.addMember")}
               />
-              <button type="submit">Qo'shish</button>
+              <button type="submit">{t("common.add")}</button>
             </form>
           )}
           <div className="member-list">
@@ -566,12 +569,12 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
               <div key={m.user_id} className="member-row">
                 <span className="avatar sm">{m.username.charAt(0).toUpperCase()}</span>
                 <span className="member-name">{m.username}</span>
-                {m.role === "owner" && <span className="member-badge">egasi</span>}
-                {m.user_id === user.id && <span className="member-you">siz</span>}
+                {m.role === "owner" && <span className="member-badge">{t("groups.badgeOwner")}</span>}
+                {m.user_id === user.id && <span className="member-you">{t("groups.youBadge")}</span>}
                 {isOwner && m.role !== "owner" && m.user_id !== user.id && (
                   <button
                     className="member-kick"
-                    title="Guruhdan chiqarish"
+                    title={t("groups.kickTitle")}
                     onClick={() => removeMember(m.user_id)}
                   >
                     ×
@@ -584,14 +587,14 @@ function GroupDetailView({ detail, user, onBack, onChanged, onLeftOrDeleted, set
           <div className="gd-danger">
             {!confirmDel ? (
               <button className="btn-danger" onClick={() => setConfirmDel(true)}>
-                {isOwner ? "Guruhni o'chirish" : "Guruhni tark etish"}
+                {isOwner ? t("groups.deleteGroup") : t("groups.leaveGroup")}
               </button>
             ) : (
               <div className="confirm-row">
                 <button className="btn-danger" onClick={leaveOrDelete}>
-                  {isOwner ? "Ha, o'chirish" : "Ha, chiqish"}
+                  {isOwner ? t("groups.confirmDelete") : t("groups.confirmLeave")}
                 </button>
-                <button className="btn-secondary" onClick={() => setConfirmDel(false)}>Bekor</button>
+                <button className="btn-secondary" onClick={() => setConfirmDel(false)}>{t("common.cancel")}</button>
               </div>
             )}
           </div>

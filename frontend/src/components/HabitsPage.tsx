@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import type { Habit } from "../types";
+import { useT } from "../i18n";
 
 interface Props {
   habits: Habit[];
@@ -130,6 +131,7 @@ function durationProgress(h: Habit): { doneDays: number; total: number; percent:
 type DurationMode = "forever" | "days" | "date";
 
 function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState<"daily" | "weekly">("daily");
   const [timesPerWeek, setTimesPerWeek] = useState(3);
@@ -159,30 +161,30 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="+ Yangi odat (masalan: 30 daqiqa kitob)"
+          placeholder={t("habit.new")}
           onFocus={() => setOpen(true)}
         />
-        <button type="submit">Qo'shish</button>
+        <button type="submit">{t("common.add")}</button>
       </div>
 
       {open && (
         <div className="habit-form-opts">
           <div className="opt">
-            <label>Chastota</label>
+            <label>{t("habit.frequency")}</label>
             <div className="seg">
               <button
                 type="button"
                 className={frequency === "daily" ? "active" : ""}
                 onClick={() => setFrequency("daily")}
               >
-                Har kuni
+                {t("habit.daily")}
               </button>
               <button
                 type="button"
                 className={frequency === "weekly" ? "active" : ""}
                 onClick={() => setFrequency("weekly")}
               >
-                Haftada N marta
+                {t("habit.weeklyN")}
               </button>
             </div>
             {frequency === "weekly" && (
@@ -194,34 +196,34 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
                   value={timesPerWeek}
                   onChange={(e) => setTimesPerWeek(Math.min(7, Math.max(1, +e.target.value)))}
                 />
-                <span>marta/hafta</span>
+                <span>{t("habit.timesPerWeek")}</span>
               </div>
             )}
           </div>
 
           <div className="opt">
-            <label>Davomiylik</label>
+            <label>{t("habit.duration")}</label>
             <div className="seg">
               <button
                 type="button"
                 className={durationMode === "forever" ? "active" : ""}
                 onClick={() => setDurationMode("forever")}
               >
-                Doimiy
+                {t("habit.forever")}
               </button>
               <button
                 type="button"
                 className={durationMode === "days" ? "active" : ""}
                 onClick={() => setDurationMode("days")}
               >
-                Kun soni
+                {t("habit.dayCount")}
               </button>
               <button
                 type="button"
                 className={durationMode === "date" ? "active" : ""}
                 onClick={() => setDurationMode("date")}
               >
-                Sanagacha
+                {t("habit.untilDate")}
               </button>
             </div>
             {durationMode === "days" && (
@@ -232,7 +234,7 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
                   value={durationDays}
                   onChange={(e) => setDurationDays(Math.max(1, +e.target.value))}
                 />
-                <span>kun</span>
+                <span>{t("habit.days")}</span>
                 <div className="preset">
                   {[21, 30, 66, 100].map((n) => (
                     <button type="button" key={n} onClick={() => setDurationDays(n)}>
@@ -259,46 +261,47 @@ function CreateForm({ onCreate }: { onCreate: Props["onCreate"] }) {
 // -------- Sahifa --------
 
 export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
+  const t = useT();
   const todayKey = ymd(new Date());
   const [statsFor, setStatsFor] = useState<string | null>(null);
 
   return (
     <div className="page habits-page">
       <div className="page-head">
-        <h2>Odatlar</h2>
+        <h2>{t("habit.title")}</h2>
       </div>
 
       <CreateForm onCreate={onCreate} />
 
       <div className="habit-list">
-        {habits.length === 0 && <div className="empty">Hali odat yo'q. Birinchisini qo'shing! 🔥</div>}
+        {habits.length === 0 && <div className="empty">{t("habit.empty")}</div>}
         {habits.map((h) => {
           const set = new Set(h.days);
           const st = streak(set);
           const wc = weekCount(set);
           const prog = durationProgress(h);
           const freqLabel =
-            h.frequency === "weekly" ? `Haftada ${h.target_per_week} marta` : "Har kuni";
+            h.frequency === "weekly" ? t("habit.weeklyLabel", { n: h.target_per_week }) : t("habit.daily");
           return (
             <div key={h.id} className="habit-card">
               <div className="habit-info">
                 <span className="habit-dot" style={{ background: h.color }} />
                 <span className="habit-name">{h.name}</span>
                 <span className="habit-freq">{freqLabel}</span>
-                <span className="habit-streak" title="Ketma-ket kunlar">🔥 {st}</span>
+                <span className="habit-streak" title={t("habit.streakTitle")}>🔥 {st}</span>
                 {h.frequency === "weekly" && (
-                  <span className="habit-week" title="Shu hafta">
+                  <span className="habit-week" title={t("habit.thisWeek")}>
                     {wc}/{h.target_per_week}
                   </span>
                 )}
                 <button
                   className={`habit-stats-btn ${statsFor === h.id ? "active" : ""}`}
-                  title="Statistika"
+                  title={t("habit.statsTitle")}
                   onClick={() => setStatsFor((v) => (v === h.id ? null : h.id))}
                 >
                   📊
                 </button>
-                <button className="habit-del" title="O'chirish" onClick={() => onDelete(h.id)}>×</button>
+                <button className="habit-del" title={t("common.delete")} onClick={() => onDelete(h.id)}>×</button>
               </div>
 
               {prog && (
@@ -310,7 +313,7 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
                     />
                   </div>
                   <span className="habit-prog-label">
-                    {prog.doneDays}/{prog.total} kun · {prog.percent}%
+                    {t("habit.progressLabel", { done: prog.doneDays, total: prog.total, percent: prog.percent })}
                   </span>
                 </div>
               )}
@@ -330,7 +333,7 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
                         isFuture ? "future" : ""
                       } ${!isToday ? "locked" : ""}`}
                       style={done ? { background: h.color, borderColor: h.color } : undefined}
-                      title={isToday ? key : `${key} (faqat bugun belgilanadi)`}
+                      title={isToday ? key : t("habit.onlyToday", { key })}
                       onClick={() => isToday && onToggle(h.id, key)}
                     >
                       {d.getDate()}
@@ -344,18 +347,18 @@ export function HabitsPage({ habits, onCreate, onToggle, onDelete }: Props) {
                   <div className="habit-stats-row">
                     <div className="hs-tile">
                       <div className="hs-num">🔥 {st}</div>
-                      <div className="hs-lbl">Joriy streak</div>
+                      <div className="hs-lbl">{t("habit.curStreak")}</div>
                     </div>
                     <div className="hs-tile">
                       <div className="hs-num">🏆 {longestStreak(h.days)}</div>
-                      <div className="hs-lbl">Eng uzun streak</div>
+                      <div className="hs-lbl">{t("habit.longStreak")}</div>
                     </div>
                     <div className="hs-tile">
                       <div className="hs-num">✅ {h.days.length}</div>
-                      <div className="hs-lbl">Jami kun</div>
+                      <div className="hs-lbl">{t("habit.totalDays")}</div>
                     </div>
                   </div>
-                  <div className="heatmap" title="Oxirgi ~3 oy">
+                  <div className="heatmap" title={t("habit.last3mo")}>
                     {(() => {
                       const cells = heatmapDays(set);
                       const weeks: typeof cells[] = [];

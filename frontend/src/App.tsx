@@ -3,6 +3,7 @@ import { api, setUnauthorizedHandler, tokenStore } from "./api";
 import type { User } from "./types";
 import { AuthScreen } from "./components/AuthScreen";
 import Workspace from "./Workspace";
+import { t } from "./i18n";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -35,7 +36,7 @@ export default function App() {
   }, []);
 
   if (checking) {
-    return <div className="loading">Yuklanmoqda…</div>;
+    return <div className="loading">{t("app.loading")}</div>;
   }
 
   if (!user) {

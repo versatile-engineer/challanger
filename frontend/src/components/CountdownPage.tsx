@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT, getLang } from "../i18n";
 
 interface Countdown {
   id: string;
@@ -31,6 +32,7 @@ function remaining(target: string) {
 }
 
 export function CountdownPage() {
+  const t = useT();
   const [items, setItems] = useState<Countdown[]>(load);
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("");
@@ -64,21 +66,21 @@ export function CountdownPage() {
   return (
     <div className="page countdown-page">
       <div className="page-head">
-        <h2>Sanoq (countdown)</h2>
+        <h2>{t("cd.title")}</h2>
       </div>
 
       <form className="cd-add" onSubmit={add}>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Voqea nomi (masalan: Tug'ilgan kun)"
+          placeholder={t("cd.eventName")}
         />
         <input type="datetime-local" value={target} onChange={(e) => setTarget(e.target.value)} />
-        <button type="submit">Qo'shish</button>
+        <button type="submit">{t("common.add")}</button>
       </form>
 
       <div className="cd-list">
-        {items.length === 0 && <div className="empty">Hali sanoq yo'q ⏳</div>}
+        {items.length === 0 && <div className="empty">{t("cd.empty")}</div>}
         {items.map((c) => {
           const r = remaining(c.target);
           return (
@@ -86,7 +88,7 @@ export function CountdownPage() {
               <div className="cd-info">
                 <div className="cd-title">{c.title}</div>
                 <div className="cd-date">
-                  {new Date(c.target).toLocaleString("uz", {
+                  {new Date(c.target).toLocaleString(getLang(), {
                     day: "numeric",
                     month: "long",
                     year: "numeric",
@@ -96,15 +98,15 @@ export function CountdownPage() {
                 </div>
               </div>
               <div className="cd-time">
-                {r.past && <span className="cd-past-label">o'tdi</span>}
+                {r.past && <span className="cd-past-label">{t("cd.past")}</span>}
                 <div className="cd-units">
-                  <span><b>{r.days}</b>kun</span>
-                  <span><b>{r.hours}</b>soat</span>
-                  <span><b>{r.mins}</b>daq</span>
-                  <span><b>{r.secs}</b>son</span>
+                  <span><b>{r.days}</b>{t("cd.days")}</span>
+                  <span><b>{r.hours}</b>{t("cd.hours")}</span>
+                  <span><b>{r.mins}</b>{t("cd.mins")}</span>
+                  <span><b>{r.secs}</b>{t("cd.secs")}</span>
                 </div>
               </div>
-              <button className="cd-del" onClick={() => remove(c.id)} title="O'chirish">×</button>
+              <button className="cd-del" onClick={() => remove(c.id)} title={t("common.delete")}>×</button>
             </div>
           );
         })}

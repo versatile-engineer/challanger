@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { useT } from "../i18n";
 
 type Mode = "work" | "short" | "long";
 
@@ -7,11 +8,6 @@ const DURATIONS: Record<Mode, number> = {
   work: 25 * 60,
   short: 5 * 60,
   long: 15 * 60,
-};
-const LABELS: Record<Mode, string> = {
-  work: "Ish vaqti",
-  short: "Qisqa tanaffus",
-  long: "Uzoq tanaffus",
 };
 
 function beep() {
@@ -32,6 +28,7 @@ function beep() {
 }
 
 export function PomodoroPage() {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("work");
   const [left, setLeft] = useState(DURATIONS.work);
   const [running, setRunning] = useState(false);
@@ -54,7 +51,7 @@ export function PomodoroPage() {
     beep();
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification("🍅 Pomodoro", {
-        body: mode === "work" ? "Ish tugadi — tanaffus qiling!" : "Tanaffus tugadi — ishga!",
+        body: mode === "work" ? t("pomo.workDone") : t("pomo.breakDone"),
       });
     }
     if (mode === "work") {
@@ -93,8 +90,8 @@ export function PomodoroPage() {
   return (
     <div className="page pomodoro-page">
       <div className="page-head">
-        <h2>Pomodoro</h2>
-        <span className="page-hint">Bugun tugatilgan: {completed} 🍅</span>
+        <h2>{t("pomo.title")}</h2>
+        <span className="page-hint">{t("pomo.todayDone", { n: completed })}</span>
       </div>
 
       <div className={`pomo-card mode-${mode}`}>
@@ -105,7 +102,7 @@ export function PomodoroPage() {
               className={mode === m ? "active" : ""}
               onClick={() => switchMode(m)}
             >
-              {LABELS[m]}
+              {t(`pomo.${m}`)}
             </button>
           ))}
         </div>
@@ -118,10 +115,10 @@ export function PomodoroPage() {
 
         <div className="pomo-controls">
           <button className="pomo-main" onClick={() => setRunning((r) => !r)}>
-            {running ? "⏸ Pauza" : "▶ Boshlash"}
+            {running ? t("pomo.pause") : t("pomo.start")}
           </button>
           <button className="pomo-reset" onClick={() => switchMode(mode)}>
-            ↺ Qayta
+            {t("pomo.reset")}
           </button>
         </div>
       </div>

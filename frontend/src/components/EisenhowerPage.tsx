@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Task } from "../types";
+import { useT } from "../i18n";
 
 interface Props {
   tasks: Task[];
@@ -8,10 +9,10 @@ interface Props {
 }
 
 const QUADRANTS = [
-  { q: 1, title: "Bajaring", sub: "Shoshilinch + Muhim", cls: "q1" },
-  { q: 2, title: "Rejalashtiring", sub: "Muhim, shoshilinch emas", cls: "q2" },
-  { q: 3, title: "Topshiring", sub: "Shoshilinch, muhim emas", cls: "q3" },
-  { q: 4, title: "O'chiring", sub: "Na shoshilinch, na muhim", cls: "q4" },
+  { q: 1, cls: "q1" },
+  { q: 2, cls: "q2" },
+  { q: 3, cls: "q3" },
+  { q: 4, cls: "q4" },
 ];
 
 /// Aniq tayinlanmagan vazifa uchun prioritet va muddatdan kvadrant taxmini
@@ -29,22 +30,25 @@ function derive(t: Task): number {
 }
 
 export function EisenhowerPage({ tasks, onSetQuadrant, onSelectTask }: Props) {
+  const t = useT();
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
 
-  const active = tasks.filter((t) => !t.completed);
-  const quadrantOf = (t: Task) => t.eisenhower ?? derive(t);
+  const active = tasks.filter((task) => !task.completed);
+  const quadrantOf = (task: Task) => task.eisenhower ?? derive(task);
 
   return (
     <div className="page eisenhower-page">
       <div className="page-head">
-        <h2>Eisenhower matritsasi</h2>
-        <span className="page-hint">Vazifalarni sudrab kvadrantlarga joylang</span>
+        <h2>{t("eisen.title")}</h2>
+        <span className="page-hint">{t("eisen.hint")}</span>
       </div>
 
       <div className="matrix">
-        {QUADRANTS.map(({ q, title, sub, cls }) => {
-          const items = active.filter((t) => quadrantOf(t) === q);
+        {QUADRANTS.map(({ q, cls }) => {
+          const items = active.filter((task) => quadrantOf(task) === q);
+          const title = t(`eisen.q${q}.title`);
+          const sub = t(`eisen.q${q}.sub`);
           return (
             <div
               key={q}
@@ -65,16 +69,16 @@ export function EisenhowerPage({ tasks, onSetQuadrant, onSelectTask }: Props) {
                 <span>{sub}</span>
               </div>
               <div className="quadrant-body">
-                {items.map((t) => (
+                {items.map((task) => (
                   <div
-                    key={t.id}
+                    key={task.id}
                     className="matrix-card"
                     draggable
-                    onDragStart={() => setDragId(t.id)}
+                    onDragStart={() => setDragId(task.id)}
                     onDragEnd={() => setDragId(null)}
-                    onClick={() => onSelectTask(t.id)}
+                    onClick={() => onSelectTask(task.id)}
                   >
-                    {t.title}
+                    {task.title}
                   </div>
                 ))}
                 {items.length === 0 && <div className="quadrant-empty">—</div>}

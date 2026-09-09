@@ -5,7 +5,7 @@ import { useT } from "../i18n";
 export type Page = "calendar" | "eisenhower" | "habits" | "groups" | "stats" | "pomodoro" | "countdown" | "settings";
 
 export type Selection =
-  | { kind: "smart"; view: "today" | "upcoming" | "all" }
+  | { kind: "smart"; view: "today" | "upcoming" | "all" | "completed" }
   | { kind: "project"; id: string }
   | { kind: "page"; page: Page };
 
@@ -21,7 +21,7 @@ const PAGES: { page: Page; key: string; icon: string }[] = [
 
 interface Props {
   projects: Project[];
-  counts: { today: number; upcoming: number; all: number; byProject: Record<string, number> };
+  counts: { today: number; upcoming: number; all: number; completed: number; byProject: Record<string, number> };
   selection: Selection;
   user: User;
   onLogout: () => void;
@@ -34,6 +34,7 @@ const SMART = [
   { view: "today", key: "nav.today", icon: "📅" },
   { view: "upcoming", key: "nav.upcoming", icon: "🗓️" },
   { view: "all", key: "nav.all", icon: "📥" },
+  { view: "completed", key: "nav.completed", icon: "✅" },
 ] as const;
 
 export function Sidebar({

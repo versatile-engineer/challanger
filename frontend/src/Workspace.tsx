@@ -67,14 +67,14 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   useEffect(() => {
     const check = () => {
       const now = Date.now();
-      for (const t of tasks) {
-        if (t.completed || !t.reminder_at) continue;
-        const at = new Date(t.reminder_at).getTime();
-        const key = `${t.id}:${t.reminder_at}`;
+      for (const task of tasks) {
+        if (task.completed || !task.reminder_at) continue;
+        const at = new Date(task.reminder_at).getTime();
+        const key = `${task.id}:${task.reminder_at}`;
         if (at <= now && at > now - 3600_000 && !notified.current.has(key)) {
           notified.current.add(key);
           if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("⏰ Eslatma", { body: t.title });
+            new Notification(t("main.reminderTitle"), { body: task.title });
           }
         }
       }
@@ -90,7 +90,10 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date(startOfToday.getTime() + 86400000);
 
-    let list = tasks.filter((t) => showCompleted || !t.completed);
+    const completedView = selection.kind === "smart" && selection.view === "completed";
+    let list = completedView
+      ? tasks.filter((t) => t.completed)
+      : tasks.filter((t) => showCompleted || !t.completed);
 
     if (tagFilter) list = list.filter((t) => (t.tags ?? []).includes(tagFilter));
 
@@ -116,8 +119,14 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       );
     }
 
-    // "Qo'lda" rejimda faqat position bo'yicha (drag-and-drop tartibi hokim).
-    if (sortMode === "manual") {
+    // Bajarilganlar ro'yxati — eng oxirgi bajarilgani birinchi.
+    if (completedView) {
+      list = [...list].sort(
+        (a, b) =>
+          new Date(b.completed_at ?? 0).getTime() - new Date(a.completed_at ?? 0).getTime()
+      );
+    } else if (sortMode === "manual") {
+      // "Qo'lda" rejimda faqat position bo'yicha (drag-and-drop tartibi hokim).
       list = [...list].sort((a, b) => a.position - b.position);
     }
     return list;
@@ -136,6 +145,7 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       today: active.filter((t) => t.due_date && new Date(t.due_date) < endOfToday).length,
       upcoming: active.filter((t) => t.due_date && new Date(t.due_date) >= endOfToday).length,
       all: active.length,
+      completed: tasks.length - active.length,
       byProject,
     };
   }, [tasks]);
@@ -197,7 +207,9 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
         case "x":
           if (selectedId) {
             e.preventDefault();
-            completeTask(selectedId);
+            const sel = tasks.find((t) => t.id === selectedId);
+            if (sel?.completed) reopenTask(selectedId);
+            else completeTask(selectedId);
           }
           break;
         case "Delete":
@@ -271,6 +283,16 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   const completeTask = async (id: string) => {
     try {
       const updated = await api.completeTask(id);
+      upsertTask(updated);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    }
+  };
+
+  // Bajarilgan vazifani qayta ochish (belgini olib tashlash).
+  const reopenTask = async (id: string) => {
+    try {
+      const updated = await api.updateTask(id, { completed: false });
       upsertTask(updated);
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -460,7 +482,7 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     const due = new Date(`${dayISO}T12:00:00`);
     try {
       const created = await api.createTask({
-        title: "Yangi vazifa",
+        title: t("main.newTask"),
         due_date: due.toISOString(),
       });
       upsertTask(created);
@@ -477,7 +499,11 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       ? t("main.today")
       : selection.kind === "smart" && selection.view === "upcoming"
       ? t("main.upcoming")
+      : selection.kind === "smart" && selection.view === "completed"
+      ? t("main.completed")
       : t("main.all");
+
+  const completedView = selection.kind === "smart" && selection.view === "completed";
 
   const renderPage = () => {
     if (selection.kind !== "page") return null;
@@ -539,26 +565,30 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("main.search")}
           />
-          <button
-            className={`sort-toggle ${sortMode === "manual" ? "active" : ""}`}
-            onClick={() => setSortMode((m) => (m === "smart" ? "manual" : "smart"))}
-            title="Tartiblash rejimi (Qo'lda — drag-and-drop)"
-          >
-            {sortMode === "manual" ? t("main.sortManual") : t("main.sortSmart")}
-          </button>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
-            />
-            {t("main.showCompleted")}
-          </label>
+          {!completedView && (
+            <>
+              <button
+                className={`sort-toggle ${sortMode === "manual" ? "active" : ""}`}
+                onClick={() => setSortMode((m) => (m === "smart" ? "manual" : "smart"))}
+                title={t("main.sortTitle")}
+              >
+                {sortMode === "manual" ? t("main.sortManual") : t("main.sortSmart")}
+              </button>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={showCompleted}
+                  onChange={(e) => setShowCompleted(e.target.checked)}
+                />
+                {t("main.showCompleted")}
+              </label>
+            </>
+          )}
         </header>
 
         {error && (
           <div className="error-bar" onClick={() => setError(null)}>
-            ⚠️ {error} (yopish uchun bosing)
+            ⚠️ {error} {t("main.errorClose")}
           </div>
         )}
 
@@ -572,18 +602,20 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
           </div>
         )}
 
-        <form className="quick-add" onSubmit={addQuickTask}>
-          <input
-            ref={quickRef}
-            value={quick}
-            onChange={(e) => setQuick(e.target.value)}
-            placeholder={t("main.quickAdd")}
-          />
-        </form>
+        {!completedView && (
+          <form className="quick-add" onSubmit={addQuickTask}>
+            <input
+              ref={quickRef}
+              value={quick}
+              onChange={(e) => setQuick(e.target.value)}
+              placeholder={t("main.quickAdd")}
+            />
+          </form>
+        )}
 
         <div className="task-list">
           {visible.length === 0 ? (
-            <div className="empty">{t("main.empty")}</div>
+            <div className="empty">{completedView ? t("main.completedEmpty") : t("main.empty")}</div>
           ) : (
             visible.map((t) => (
               <TaskItem
@@ -591,7 +623,7 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
                 task={t}
                 selected={t.id === selectedId}
                 onSelect={() => setSelectedId(t.id)}
-                onComplete={() => completeTask(t.id)}
+                onComplete={() => (t.completed ? reopenTask(t.id) : completeTask(t.id))}
                 onTagClick={(tag) => setTagFilter(tag)}
                 subtaskCount={subtaskCounts[t.id]}
                 draggable={sortMode === "manual"}

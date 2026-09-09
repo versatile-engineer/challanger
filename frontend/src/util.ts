@@ -1,4 +1,5 @@
 // Sana bilan ishlash uchun kichik yordamchilar.
+import { t, getLang } from "./i18n";
 
 export function toLocalInput(iso: string | null): string {
   // ISO -> <input type="datetime-local"> formati (YYYY-MM-DDTHH:mm)
@@ -21,15 +22,15 @@ export function formatDue(iso: string | null): { text: string; tone: "overdue" |
   const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
   const days = Math.round((startOfDay(d).getTime() - startOfDay(now).getTime()) / 86400000);
 
-  const time = d.toLocaleTimeString("uz", { hour: "2-digit", minute: "2-digit" });
+  const locale = getLang();
+  const time = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   const hasTime = !(d.getHours() === 0 && d.getMinutes() === 0);
 
   let text: string;
-  if (days === 0) text = hasTime ? `Bugun ${time}` : "Bugun";
-  else if (days === 1) text = "Ertaga";
-  else if (days === -1) text = "Kecha";
-  else if (days < 0) text = d.toLocaleDateString("uz", { day: "numeric", month: "short" });
-  else text = d.toLocaleDateString("uz", { day: "numeric", month: "short" });
+  if (days === 0) text = hasTime ? t("date.todayAt", { time }) : t("date.today");
+  else if (days === 1) text = t("date.tomorrow");
+  else if (days === -1) text = t("date.yesterday");
+  else text = d.toLocaleDateString(locale, { day: "numeric", month: "short" });
 
   let tone: "overdue" | "today" | "soon" | "none" = "none";
   if (days < 0) tone = "overdue";

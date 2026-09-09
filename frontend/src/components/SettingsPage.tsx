@@ -140,7 +140,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
       a.download = `challanger-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setDataMsg({ kind: "ok", text: "Ma'lumotlar yuklab olindi ✓" });
+      setDataMsg({ kind: "ok", text: t("settings.dataDownloaded") });
     } catch (err: any) {
       setDataMsg({ kind: "err", text: String(err.message ?? err) });
     } finally {
@@ -198,9 +198,9 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
           end_date: h.end_date ?? undefined,
         });
       }
-      setDataMsg({ kind: "ok", text: "Import tugadi ✓ — sahifani yangilang" });
+      setDataMsg({ kind: "ok", text: t("settings.importDone") });
     } catch (err: any) {
-      setDataMsg({ kind: "err", text: `Import xatosi: ${String(err.message ?? err)}` });
+      setDataMsg({ kind: "err", text: t("settings.importError", { msg: String(err.message ?? err) }) });
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -218,7 +218,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
       onUserUpdate(updated);
       setUsername(updated.username);
       setEmail(updated.email);
-      setProfileMsg({ kind: "ok", text: "Profil saqlandi ✓" });
+      setProfileMsg({ kind: "ok", text: t("settings.profileSaved") });
     } catch (err: any) {
       setProfileMsg({ kind: "err", text: String(err.message ?? err) });
     } finally {
@@ -230,7 +230,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
     e.preventDefault();
     setPassMsg(null);
     if (newPass !== confirmPass) {
-      setPassMsg({ kind: "err", text: "Yangi parollar mos kelmadi" });
+      setPassMsg({ kind: "err", text: t("settings.passwordMismatch") });
       return;
     }
     setSavingPass(true);
@@ -239,7 +239,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
       setCurPass("");
       setNewPass("");
       setConfirmPass("");
-      setPassMsg({ kind: "ok", text: "Parol o'zgartirildi ✓" });
+      setPassMsg({ kind: "ok", text: t("settings.passwordChanged") });
     } catch (err: any) {
       setPassMsg({ kind: "err", text: String(err.message ?? err) });
     } finally {
@@ -247,9 +247,9 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
     }
   };
 
-  const chooseTheme = (t: Theme) => {
-    setTheme(t);
-    setThemeState(t);
+  const chooseTheme = (th: Theme) => {
+    setTheme(th);
+    setThemeState(th);
   };
 
   const requestNotif = async () => {
@@ -276,10 +276,10 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Profil */}
       <section className="card">
-        <h3>Profil</h3>
+        <h3>{t("settings.profile")}</h3>
         <form onSubmit={saveProfile} className="settings-form">
           <label className="settings-field">
-            <span>Foydalanuvchi nomi</span>
+            <span>{t("auth.username")}</span>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
@@ -287,29 +287,29 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
               maxLength={20}
               required
             />
-            <small>Faqat kichik harflar va raqamlar · noyob</small>
+            <small>{t("settings.usernameHint")}</small>
           </label>
           <label className="settings-field">
-            <span>Email</span>
+            <span>{t("auth.email")}</span>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </label>
           {profileMsg && <div className={`settings-msg ${profileMsg.kind}`}>{profileMsg.text}</div>}
           <button type="submit" className="btn-primary" disabled={!profileChanged || savingProfile}>
-            {savingProfile ? "…" : "Saqlash"}
+            {savingProfile ? "…" : t("common.save")}
           </button>
         </form>
       </section>
 
       {/* Parol */}
       <section className="card">
-        <h3>Parolni o'zgartirish</h3>
+        <h3>{t("settings.changePassword")}</h3>
         <form onSubmit={savePassword} className="settings-form">
           <label className="settings-field">
-            <span>Joriy parol</span>
+            <span>{t("settings.curPassword")}</span>
             <input type="password" value={curPass} onChange={(e) => setCurPass(e.target.value)} required />
           </label>
           <label className="settings-field">
-            <span>Yangi parol</span>
+            <span>{t("settings.newPassword")}</span>
             <input
               type="password"
               value={newPass}
@@ -319,7 +319,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             />
           </label>
           <label className="settings-field">
-            <span>Yangi parolni tasdiqlang</span>
+            <span>{t("settings.confirmPassword")}</span>
             <input
               type="password"
               value={confirmPass}
@@ -330,7 +330,7 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
           </label>
           {passMsg && <div className={`settings-msg ${passMsg.kind}`}>{passMsg.text}</div>}
           <button type="submit" className="btn-primary" disabled={savingPass}>
-            {savingPass ? "…" : "Parolni yangilash"}
+            {savingPass ? "…" : t("settings.updatePassword")}
           </button>
         </form>
       </section>
@@ -354,22 +354,22 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Ko'rinish */}
       <section className="card">
-        <h3>Ko'rinish (mavzu)</h3>
+        <h3>{t("settings.appearance")}</h3>
         <div className="seg">
-          {(["system", "light", "dark", "gruvbox"] as Theme[]).map((t) => (
+          {(["system", "light", "dark", "gruvbox"] as Theme[]).map((th) => (
             <button
-              key={t}
+              key={th}
               type="button"
-              className={theme === t ? "active" : ""}
-              onClick={() => chooseTheme(t)}
+              className={theme === th ? "active" : ""}
+              onClick={() => chooseTheme(th)}
             >
-              {t === "system"
-                ? "Tizim"
-                : t === "light"
-                ? "Yorug'"
-                : t === "dark"
-                ? "Qorong'i"
-                : "Gruvbox"}
+              {th === "system"
+                ? t("settings.themeSystem")
+                : th === "light"
+                ? t("settings.themeLight")
+                : th === "dark"
+                ? t("settings.themeDark")
+                : t("settings.themeGruvbox")}
             </button>
           ))}
         </div>
@@ -377,20 +377,20 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Bildirishnoma */}
       <section className="card">
-        <h3>Bildirishnomalar</h3>
+        <h3>{t("settings.notifications")}</h3>
         {notif === "unsupported" ? (
-          <p className="settings-note">Brauzeringiz bildirishnomani qo'llab-quvvatlamaydi.</p>
+          <p className="settings-note">{t("settings.notifUnsupported")}</p>
         ) : notif === "granted" ? (
-          <p className="settings-note">✅ Bildirishnomalar yoqilgan (eslatmalar ishlaydi).</p>
+          <p className="settings-note">{t("settings.notifGranted")}</p>
         ) : (
           <div className="settings-inline">
             <p className="settings-note">
               {notif === "denied"
-                ? "Bloklangan — brauzer sozlamalaridan ruxsat bering."
-                : "Eslatmalar uchun ruxsat kerak."}
+                ? t("settings.notifDenied")
+                : t("settings.notifDefault")}
             </p>
             <button className="btn-secondary" onClick={requestNotif} disabled={notif === "denied"}>
-              Ruxsat berish
+              {t("settings.allow")}
             </button>
           </div>
         )}
@@ -398,50 +398,42 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Telegram */}
       <section className="card">
-        <h3>Telegram eslatmalari</h3>
+        <h3>{t("settings.telegram")}</h3>
         {tg === null ? (
-          <p className="settings-note">Yuklanmoqda…</p>
+          <p className="settings-note">{t("app.loading")}</p>
         ) : !tg.configured ? (
           <p className="settings-note">
-            Serverda Telegram bot sozlanmagan. Administrator <code>TELEGRAM_BOT_TOKEN</code> ni
-            o'rnatishi kerak.
+            {t("settings.tgNotConfiguredPre")} <code>TELEGRAM_BOT_TOKEN</code> {t("settings.tgNotConfiguredPost")}
           </p>
         ) : tg.connected ? (
           <div className="settings-inline">
-            <p className="settings-note">
-              ✅ Telegram ulangan — vazifa eslatmalari botga yuboriladi.
-            </p>
+            <p className="settings-note">{t("settings.tgConnected")}</p>
             <button className="btn-secondary" onClick={disconnectTelegram} disabled={tgBusy}>
-              Uzish
+              {t("settings.disconnect")}
             </button>
           </div>
         ) : (
           <div className="settings-form">
-            <p className="settings-note">
-              Botga ulaning — belgilangan eslatma vaqtida vazifalaringiz Telegram'ga xabar bo'lib
-              keladi.
-            </p>
+            <p className="settings-note">{t("settings.tgConnectInfo")}</p>
             <div className="settings-inline">
-              <span className="settings-note">
-                Tugmani bosing, bot ochiladi va <b>Start</b> ni bosing.
-              </span>
+              <span className="settings-note">{t("settings.tgStartHint")}</span>
               <div className="confirm-row">
                 <button className="btn-primary" onClick={connectTelegram} disabled={tgBusy}>
-                  {tgBusy ? "…" : "Telegram'ni ulash"}
+                  {tgBusy ? "…" : t("settings.tgConnect")}
                 </button>
                 <button className="btn-secondary" onClick={refreshTelegram} disabled={tgBusy}>
-                  ⟳ Tekshirish
+                  {t("settings.tgCheck")}
                 </button>
               </div>
             </div>
             {tgLink && (
               <small className="settings-note">
-                Ochilmadimi? Havola:{" "}
+                {t("settings.tgLinkFailPre")}{" "}
                 <a href={tgLink} target="_blank" rel="noreferrer">
                   {tgLink}
                 </a>{" "}
                 <br />
-                Botda Start bosgach, <b>⟳ Tekshirish</b> tugmasini bosing.
+                {t("settings.tgLinkFailPost")}
               </small>
             )}
           </div>
@@ -450,29 +442,23 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Kalendar obunasi */}
       <section className="card">
-        <h3>Kalendar obunasi (iCal)</h3>
-        <p className="settings-note">
-          Muddatli vazifalaringizni Google, Apple yoki Outlook kalendariga obuna qiling —
-          o'zgarishlar avtomatik ko'rinadi.
-        </p>
+        <h3>{t("settings.calTitle")}</h3>
+        <p className="settings-note">{t("settings.calInfo")}</p>
         {!calUrl ? (
           <button className="btn-primary" onClick={enableCalendar} disabled={calBusy}>
-            {calBusy ? "…" : "Kalendar havolasini yaratish"}
+            {calBusy ? "…" : t("settings.calCreate")}
           </button>
         ) : (
           <div className="settings-form">
             <div className="settings-inline">
               <input className="cal-url" readOnly value={calUrl} onFocus={(e) => e.target.select()} />
               <button className="btn-secondary" onClick={copyCalUrl}>
-                {calCopied ? "✓ Nusxalandi" : "Nusxalash"}
+                {calCopied ? t("common.copied") : t("common.copy")}
               </button>
             </div>
-            <small className="settings-note">
-              Bu havolani kalendar dasturingizda "URL orqali obuna" ("Subscribe from URL") bo'limiga
-              joylashtiring. Havolani <b>hech kimga bermang</b> — u vazifalaringizni ochadi.
-            </small>
+            <small className="settings-note">{t("settings.calSubHint")}</small>
             <button className="btn-secondary" onClick={regenCalendar} disabled={calBusy}>
-              ⟳ Havolani yangilash (eskisini bekor qiladi)
+              {t("settings.calRegen")}
             </button>
           </div>
         )}
@@ -480,18 +466,16 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
 
       {/* Ma'lumotlar */}
       <section className="card">
-        <h3>Ma'lumotlar (zaxira)</h3>
+        <h3>{t("settings.dataTitle")}</h3>
         {dataMsg && <div className={`settings-msg ${dataMsg.kind}`}>{dataMsg.text}</div>}
         <div className="settings-inline">
-          <span className="settings-note">
-            Barcha vazifa, loyiha, odat va qadamlarni JSON faylga yuklab oling yoki qayta tiklang.
-          </span>
+          <span className="settings-note">{t("settings.dataInfo")}</span>
           <div className="confirm-row">
             <button className="btn-secondary" onClick={exportData} disabled={busy}>
-              ⬇ Eksport
+              {t("settings.export")}
             </button>
             <button className="btn-secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
-              ⬆ Import
+              {t("settings.import")}
             </button>
             <input
               ref={fileRef}
@@ -505,29 +489,27 @@ export function SettingsPage({ user, onUserUpdate, onLogout }: Props) {
             />
           </div>
         </div>
-        {busy && <p className="settings-note">⏳ Bajarilmoqda…</p>}
+        {busy && <p className="settings-note">{t("settings.working")}</p>}
       </section>
 
       {/* Hisob */}
       <section className="card danger-zone">
-        <h3>Hisob</h3>
+        <h3>{t("settings.account")}</h3>
         <div className="settings-inline">
-          <span className="settings-note">Tizimdan chiqish</span>
-          <button className="btn-secondary" onClick={onLogout}>Chiqish ⎋</button>
+          <span className="settings-note">{t("settings.logoutLabel")}</span>
+          <button className="btn-secondary" onClick={onLogout}>{t("settings.logoutBtn")}</button>
         </div>
         <hr />
         <div className="settings-inline">
-          <span className="settings-note">
-            Hisobni o'chirish — barcha vazifa, loyiha va odatlaringiz butunlay o'chadi.
-          </span>
+          <span className="settings-note">{t("settings.deleteAccountInfo")}</span>
           {!confirmDelete ? (
             <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
-              Hisobni o'chirish
+              {t("settings.deleteAccount")}
             </button>
           ) : (
             <div className="confirm-row">
-              <button className="btn-danger" onClick={deleteAccount}>Ha, o'chirish</button>
-              <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>Bekor</button>
+              <button className="btn-danger" onClick={deleteAccount}>{t("settings.confirmDelete")}</button>
+              <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>{t("common.cancel")}</button>
             </div>
           )}
         </div>

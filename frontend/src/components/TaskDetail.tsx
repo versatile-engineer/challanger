@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Project, Recurrence, Subtask, Task } from "../types";
-import { PRIORITY_LABELS } from "../types";
 import { fromLocalInput, toLocalInput } from "../util";
+import { useT, priorityLabel } from "../i18n";
 
 interface Props {
   task: Task;
@@ -28,6 +28,7 @@ export function TaskDetail({
   onRenameSubtask,
   onDeleteSubtask,
 }: Props) {
+  const t = useT();
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
   const [tagInput, setTagInput] = useState("");
@@ -72,9 +73,9 @@ export function TaskDetail({
             checked={task.completed}
             onChange={(e) => onChange({ completed: e.target.checked })}
           />
-          Bajarildi
+          {t("detail.done")}
         </label>
-        <button className="icon-btn" onClick={onClose} title="Yopish">
+        <button className="icon-btn" onClick={onClose} title={t("common.close")}>
           ×
         </button>
       </div>
@@ -88,7 +89,7 @@ export function TaskDetail({
 
       <textarea
         className="detail-notes"
-        placeholder="Izoh qo'shing…"
+        placeholder={t("detail.notesPlaceholder")}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         onBlur={() => notes !== task.notes && onChange({ notes })}
@@ -96,7 +97,7 @@ export function TaskDetail({
 
       <div className="field">
         <label>
-          Kichik qadamlar{subtasks.length > 0 && ` (${doneCount}/${subtasks.length})`}
+          {t("detail.subtasks")}{subtasks.length > 0 && ` (${doneCount}/${subtasks.length})`}
         </label>
         {subtasks.length > 0 && (
           <div className="subtask-progress">
@@ -122,7 +123,7 @@ export function TaskDetail({
                   if (v && v !== s.title) onRenameSubtask(s.id, v);
                 }}
               />
-              <button className="subtask-del" onClick={() => onDeleteSubtask(s.id)} title="O'chirish">
+              <button className="subtask-del" onClick={() => onDeleteSubtask(s.id)} title={t("common.delete")}>
                 ×
               </button>
             </div>
@@ -132,18 +133,18 @@ export function TaskDetail({
           <input
             value={subInput}
             onChange={(e) => setSubInput(e.target.value)}
-            placeholder="+ Qadam qo'shish"
+            placeholder={t("detail.subtaskAdd")}
           />
         </form>
       </div>
 
       <div className="field">
-        <label>Loyiha</label>
+        <label>{t("detail.project")}</label>
         <select
           value={task.project_id ?? ""}
           onChange={(e) => onChange({ project_id: e.target.value || null })}
         >
-          <option value="">— Yo'q —</option>
+          <option value="">{t("detail.projectNone")}</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -153,7 +154,7 @@ export function TaskDetail({
       </div>
 
       <div className="field">
-        <label>Muddat (due)</label>
+        <label>{t("detail.due")}</label>
         <input
           type="datetime-local"
           value={toLocalInput(task.due_date)}
@@ -162,39 +163,39 @@ export function TaskDetail({
       </div>
 
       <div className="field">
-        <label>Prioritet</label>
+        <label>{t("detail.priority")}</label>
         <select
           value={task.priority}
           onChange={(e) => onChange({ priority: Number(e.target.value) })}
         >
-          {Object.entries(PRIORITY_LABELS).map(([v, label]) => (
+          {[0, 1, 2, 3].map((v) => (
             <option key={v} value={v}>
-              {label}
+              {priorityLabel(v)}
             </option>
           ))}
         </select>
       </div>
 
       <div className="field">
-        <label>Takrorlanish</label>
+        <label>{t("detail.recurrence")}</label>
         <select
           value={task.recurrence ?? ""}
           onChange={(e) =>
             onChange({ recurrence: (e.target.value || null) as Recurrence })
           }
         >
-          <option value="">Yo'q</option>
-          <option value="daily">Har kuni</option>
-          <option value="weekdays">Ish kunlari (Du–Ju)</option>
-          <option value="weekly">Har hafta</option>
-          <option value="biweekly">2 haftada</option>
-          <option value="monthly">Har oy</option>
-          <option value="yearly">Har yil</option>
+          <option value="">{t("recur.none")}</option>
+          <option value="daily">{t("recur.daily")}</option>
+          <option value="weekdays">{t("recur.weekdaysLong")}</option>
+          <option value="weekly">{t("recur.weekly")}</option>
+          <option value="biweekly">{t("recur.biweekly")}</option>
+          <option value="monthly">{t("recur.monthly")}</option>
+          <option value="yearly">{t("recur.yearly")}</option>
         </select>
       </div>
 
       <div className="field">
-        <label>Eslatma (reminder)</label>
+        <label>{t("detail.reminder")}</label>
         <input
           type="datetime-local"
           value={toLocalInput(task.reminder_at)}
@@ -203,12 +204,12 @@ export function TaskDetail({
       </div>
 
       <div className="field">
-        <label>Teglar</label>
+        <label>{t("detail.tags")}</label>
         <div className="tag-editor">
-          {(task.tags ?? []).map((t) => (
-            <span key={t} className="tag-chip">
-              #{t}
-              <button type="button" onClick={() => removeTag(t)} title="O'chirish">×</button>
+          {(task.tags ?? []).map((tag) => (
+            <span key={tag} className="tag-chip">
+              #{tag}
+              <button type="button" onClick={() => removeTag(tag)} title={t("common.delete")}>×</button>
             </span>
           ))}
           <input
@@ -224,13 +225,13 @@ export function TaskDetail({
               }
             }}
             onBlur={() => addTag(tagInput)}
-            placeholder={(task.tags ?? []).length ? "" : "+ teg"}
+            placeholder={(task.tags ?? []).length ? "" : t("detail.tagPlaceholder")}
           />
         </div>
       </div>
 
       <button className="danger" onClick={onDelete}>
-        🗑 Vazifani o'chirish
+        {t("detail.deleteTask")}
       </button>
     </aside>
   );

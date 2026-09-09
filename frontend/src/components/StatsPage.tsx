@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type PomodoroStats } from "../api";
 import type { GroupDetail, Habit, Project, Subtask, Task } from "../types";
-import { PRIORITY_COLORS, PRIORITY_LABELS } from "../types";
+import { PRIORITY_COLORS } from "../types";
 import { StatTile, LineChart, HBarChart, Donut, ColumnChart } from "./charts";
+import { useT, priorityLabel, weekdayShorts, getLang } from "../i18n";
 
 const S1 = "var(--viz-s1)"; // ko'k
 const S2 = "var(--viz-s2)"; // aqua
@@ -36,6 +37,7 @@ interface Data {
 const POMO = "#ef4444"; // pomodoro (qizil)
 
 export function StatsPage({ userId }: { userId: string }) {
+  const t = useT();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,8 +119,8 @@ export function StatsPage({ userId }: { userId: string }) {
 
     // ----- Prioritet donut -----
     const byPrio = [0, 1, 2, 3].map((p) => ({
-      label: PRIORITY_LABELS[p],
-      value: tasks.filter((t) => t.priority === p).length,
+      label: priorityLabel(p),
+      value: tasks.filter((task) => task.priority === p).length,
       color: PRIORITY_COLORS[p],
     }));
 
@@ -133,22 +135,22 @@ export function StatsPage({ userId }: { userId: string }) {
           color: p.color,
           value: pts.length,
           segments: [
-            { value: done, color: p.color, name: "bajarilgan" },
-            { value: rest, color: MUTED, name: "qolgan" },
+            { value: done, color: p.color, name: t("stats.done") },
+            { value: rest, color: MUTED, name: t("stats.remaining") },
           ],
         };
       })
       .filter((r) => r.value > 0);
-    const noProj = tasks.filter((t) => !t.project_id);
+    const noProj = tasks.filter((task) => !task.project_id);
     if (noProj.length) {
-      const done = noProj.filter((t) => t.completed).length;
+      const done = noProj.filter((task) => task.completed).length;
       projRows.push({
-        label: "Loyihasiz",
+        label: t("stats.noProject"),
         color: MUTED,
         value: noProj.length,
         segments: [
-          { value: done, color: S1, name: "bajarilgan" },
-          { value: noProj.length - done, color: MUTED, name: "qolgan" },
+          { value: done, color: S1, name: t("stats.done") },
+          { value: noProj.length - done, color: MUTED, name: t("stats.remaining") },
         ],
       });
     }
@@ -163,7 +165,7 @@ export function StatsPage({ userId }: { userId: string }) {
       .map(([tag, count]) => ({ label: `#${tag}`, color: S1, value: count }));
 
     // ----- Hafta kunlari bo'yicha faollik -----
-    const wdNames = ["Du", "Se", "Cho", "Pa", "Ju", "Sha", "Ya"];
+    const wdNames = weekdayShorts();
     const wd = new Array(7).fill(0);
     const addWd = (iso: string) => {
       const dt = new Date(iso.length <= 10 ? iso + "T00:00:00" : iso);
@@ -193,9 +195,9 @@ export function StatsPage({ userId }: { userId: string }) {
         pomoToday: pomodoro.today, pomoTotal: pomodoro.total, pomoMinutes: pomodoro.minutes_total,
       },
       line: { labels: lineLabels, series: [
-        { name: "Vazifalar", color: S1, points: taskDone30 },
-        { name: "Odatlar", color: S2, points: habit30 },
-        { name: "Pomodoro", color: POMO, points: pomo30 },
+        { name: t("stats.seriesTasks"), color: S1, points: taskDone30 },
+        { name: t("stats.seriesHabits"), color: S2, points: habit30 },
+        { name: t("stats.seriesPomodoro"), color: POMO, points: pomo30 },
       ] },
       byPrio,
       projRows,
@@ -204,76 +206,77 @@ export function StatsPage({ userId }: { userId: string }) {
       habitRows,
       hasGroups: groups.length > 0,
     };
-  }, [data, userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, userId, getLang()]);
 
   if (error) return <div className="page stats-page"><div className="error-bar">⚠️ {error}</div></div>;
-  if (!stats) return <div className="page stats-page"><div className="page-head"><h2>Statistika</h2></div><div className="empty">Yuklanmoqda…</div></div>;
+  if (!stats) return <div className="page stats-page"><div className="page-head"><h2>{t("stats.title")}</h2></div><div className="empty">{t("app.loading")}</div></div>;
 
   return (
     <div className="page stats-page">
       <div className="page-head">
-        <h2>Statistika</h2>
-        <span className="page-hint">Barcha bo'limlar bo'yicha umumiy ko'rsatkichlar</span>
+        <h2>{t("stats.title")}</h2>
+        <span className="page-hint">{t("stats.hint")}</span>
       </div>
 
       {/* KPI tiles */}
       <div className="stat-cards">
-        <StatTile value={stats.kpi.completionRate + "%"} label="Vazifa bajarish darajasi" icon="🎯" accent={S1} />
-        <StatTile value={stats.kpi.doneTasks} label="Bajarilgan vazifalar" icon="✅" />
-        <StatTile value={stats.kpi.totalTasks} label="Jami vazifalar" icon="📋" />
-        <StatTile value={stats.kpi.habitCheckins} label="Odat belgilashlari" icon="🔥" />
-        <StatTile value={stats.kpi.bestStreak} label="Eng yaxshi joriy streak" icon="🏆" />
-        <StatTile value={`${stats.kpi.subDone}/${stats.kpi.subTotal}`} label="Kichik qadamlar" icon="☑" />
-        <StatTile value={stats.kpi.pomoToday} label="Bugungi pomodoro" icon="🍅" accent={POMO} />
-        <StatTile value={`${Math.round(stats.kpi.pomoMinutes / 60)} soat`} label="Jami fokus vaqti" icon="⏱" />
+        <StatTile value={stats.kpi.completionRate + "%"} label={t("stats.completionRate")} icon="🎯" accent={S1} />
+        <StatTile value={stats.kpi.doneTasks} label={t("stats.doneTasks")} icon="✅" />
+        <StatTile value={stats.kpi.totalTasks} label={t("stats.totalTasks")} icon="📋" />
+        <StatTile value={stats.kpi.habitCheckins} label={t("stats.habitCheckins")} icon="🔥" />
+        <StatTile value={stats.kpi.bestStreak} label={t("stats.bestStreak")} icon="🏆" />
+        <StatTile value={`${stats.kpi.subDone}/${stats.kpi.subTotal}`} label={t("stats.subtasks")} icon="☑" />
+        <StatTile value={stats.kpi.pomoToday} label={t("stats.pomoToday")} icon="🍅" accent={POMO} />
+        <StatTile value={t("stats.hours", { n: Math.round(stats.kpi.pomoMinutes / 60) })} label={t("stats.focusTime")} icon="⏱" />
         {stats.hasGroups && (
-          <StatTile value={stats.kpi.groupTasksDone} label="Jamoada bajargan" icon="👥" />
+          <StatTile value={stats.kpi.groupTasksDone} label={t("stats.groupDone")} icon="👥" />
         )}
       </div>
 
       <div className="chart-grid">
         {/* 30 kunlik faollik */}
         <div className="chart-card wide">
-          <h3>Oxirgi 30 kun — vazifa, odat va pomodoro</h3>
+          <h3>{t("stats.chart30")}</h3>
           <LineChart series={stats.line.series} labels={stats.line.labels} />
         </div>
 
         {/* Prioritet */}
         <div className="chart-card">
-          <h3>Prioritet bo'yicha vazifalar</h3>
+          <h3>{t("stats.byPriority")}</h3>
           <Donut
             data={stats.byPrio}
-            centerLabel="jami"
+            centerLabel={t("stats.total")}
             centerValue={stats.kpi.totalTasks}
           />
         </div>
 
         {/* Hafta kunlari */}
         <div className="chart-card">
-          <h3>Hafta kunlari bo'yicha faollik</h3>
+          <h3>{t("stats.weekdayActivity")}</h3>
           <ColumnChart data={stats.weekdayData} color={S1} />
         </div>
 
         {/* Loyihalar */}
         <div className="chart-card">
-          <h3>Loyihalar bo'yicha (bajarilgan / qolgan)</h3>
+          <h3>{t("stats.byProject")}</h3>
           <HBarChart rows={stats.projRows} />
           <div className="chart-legend">
-            <span className="legend-item"><span className="legend-swatch" style={{ background: S1 }} />bajarilgan</span>
-            <span className="legend-item"><span className="legend-swatch" style={{ background: MUTED }} />qolgan</span>
+            <span className="legend-item"><span className="legend-swatch" style={{ background: S1 }} />{t("stats.done")}</span>
+            <span className="legend-item"><span className="legend-swatch" style={{ background: MUTED }} />{t("stats.remaining")}</span>
           </div>
         </div>
 
         {/* Odatlar shu hafta */}
         <div className="chart-card">
-          <h3>Odatlar — shu hafta (kun)</h3>
+          <h3>{t("stats.habitsThisWeek")}</h3>
           <HBarChart rows={stats.habitRows} />
         </div>
 
         {/* Teglar */}
         {stats.tagRows.length > 0 && (
           <div className="chart-card">
-            <h3>Eng ko'p ishlatilgan teglar</h3>
+            <h3>{t("stats.topTags")}</h3>
             <HBarChart rows={stats.tagRows} />
           </div>
         )}

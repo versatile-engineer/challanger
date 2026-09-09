@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, tokenStore } from "../api";
 import type { User } from "../types";
+import { useT } from "../i18n";
 
 interface Props {
   onAuth: (user: User) => void;
@@ -9,6 +10,7 @@ interface Props {
 type Mode = "login" | "signup";
 
 export function AuthScreen({ onAuth }: Props) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -39,12 +41,12 @@ export function AuthScreen({ onAuth }: Props) {
       <form className="auth-card" onSubmit={submit}>
         <h1 className="auth-logo">✓ Challanger</h1>
         <p className="auth-sub">
-          {mode === "login" ? "Hisobingizga kiring" : "Yangi hisob yarating"}
+          {mode === "login" ? t("auth.loginSub") : t("auth.signupSub")}
         </p>
 
         {mode === "signup" && (
           <label className="auth-field">
-            <span>Foydalanuvchi nomi</span>
+            <span>{t("auth.username")}</span>
             <input
               value={username}
               onChange={(e) =>
@@ -57,31 +59,29 @@ export function AuthScreen({ onAuth }: Props) {
               required
               autoFocus
             />
-            <small className="auth-hint">
-              Faqat kichik harflar va raqamlar · noyob bo'lishi kerak
-            </small>
+            <small className="auth-hint">{t("auth.usernameHint")}</small>
           </label>
         )}
 
         <label className="auth-field">
-          <span>Email</span>
+          <span>{t("auth.email")}</span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="siz@example.com"
+            placeholder={t("auth.emailPlaceholder")}
             required
             autoFocus={mode === "login"}
           />
         </label>
 
         <label className="auth-field">
-          <span>Parol</span>
+          <span>{t("auth.password")}</span>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="kamida 6 ta belgi"
+            placeholder={t("auth.passwordPlaceholder")}
             minLength={6}
             required
           />
@@ -90,22 +90,22 @@ export function AuthScreen({ onAuth }: Props) {
         {error && <div className="auth-error">⚠️ {error}</div>}
 
         <button className="auth-submit" type="submit" disabled={busy}>
-          {busy ? "…" : mode === "login" ? "Kirish" : "Ro'yxatdan o'tish"}
+          {busy ? "…" : mode === "login" ? t("auth.login") : t("auth.signup")}
         </button>
 
         <div className="auth-switch">
           {mode === "login" ? (
             <>
-              Hisobingiz yo'qmi?{" "}
+              {t("auth.noAccount")}{" "}
               <button type="button" onClick={() => { setMode("signup"); setError(null); }}>
-                Ro'yxatdan o'tish
+                {t("auth.signup")}
               </button>
             </>
           ) : (
             <>
-              Hisobingiz bormi?{" "}
+              {t("auth.haveAccount")}{" "}
               <button type="button" onClick={() => { setMode("login"); setError(null); }}>
-                Kirish
+                {t("auth.login")}
               </button>
             </>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Habit, Project, Task } from "../types";
 import type { Page, Selection } from "./Sidebar";
+import { useT, getLang } from "../i18n";
 
 interface Item {
   kind: "task" | "habit" | "project" | "page";
@@ -19,18 +20,19 @@ interface Props {
   onSelect: (s: Selection) => void;
 }
 
-const PAGE_ITEMS: { page: Page; label: string; icon: string }[] = [
-  { page: "calendar", label: "Kalendar", icon: "📆" },
-  { page: "eisenhower", label: "Eisenhower", icon: "🧭" },
-  { page: "habits", label: "Odatlar", icon: "🔥" },
-  { page: "groups", label: "Jamoa", icon: "👥" },
-  { page: "stats", label: "Statistika", icon: "📈" },
-  { page: "pomodoro", label: "Pomodoro", icon: "🍅" },
-  { page: "countdown", label: "Sanoq", icon: "⏳" },
-  { page: "settings", label: "Sozlamalar", icon: "⚙️" },
+const PAGE_ITEMS: { page: Page; labelKey: string; icon: string }[] = [
+  { page: "calendar", labelKey: "nav.calendar", icon: "📆" },
+  { page: "eisenhower", labelKey: "nav.eisenhower", icon: "🧭" },
+  { page: "habits", labelKey: "nav.habits", icon: "🔥" },
+  { page: "groups", labelKey: "nav.groups", icon: "👥" },
+  { page: "stats", labelKey: "nav.stats", icon: "📈" },
+  { page: "pomodoro", labelKey: "nav.pomodoro", icon: "🍅" },
+  { page: "countdown", labelKey: "nav.countdown", icon: "⏳" },
+  { page: "settings", labelKey: "nav.settings", icon: "⚙️" },
 ];
 
 export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -66,8 +68,8 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
       all.push({
         kind: "page",
         id: p.page,
-        label: p.label,
-        hint: "Sahifa",
+        label: t(p.labelKey),
+        hint: t("cmdk.page"),
         icon: p.icon,
         action: () => onSelect({ kind: "page", page: p.page }),
       });
@@ -77,19 +79,19 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
         kind: "project",
         id: p.id,
         label: p.name,
-        hint: "Loyiha",
+        hint: t("cmdk.project"),
         icon: "📁",
         action: () => onSelect({ kind: "project", id: p.id }),
       });
     }
-    for (const t of tasks) {
+    for (const task of tasks) {
       all.push({
         kind: "task",
-        id: t.id,
-        label: t.title,
-        hint: t.completed ? "Vazifa · bajarilgan" : "Vazifa",
-        icon: t.completed ? "✅" : "⚪",
-        action: () => onSelectTask(t.id),
+        id: task.id,
+        label: task.title,
+        hint: task.completed ? t("cmdk.taskDone") : t("cmdk.task"),
+        icon: task.completed ? "✅" : "⚪",
+        action: () => onSelectTask(task.id),
       });
     }
     for (const h of habits) {
@@ -97,13 +99,14 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
         kind: "habit",
         id: h.id,
         label: h.name,
-        hint: "Odat",
+        hint: t("cmdk.habit"),
         icon: "🔥",
         action: () => onSelect({ kind: "page", page: "habits" }),
       });
     }
     return all;
-  }, [tasks, habits, projects, onSelect, onSelectTask]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, habits, projects, onSelect, onSelectTask, getLang()]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -130,7 +133,7 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
           className="cmdk-input"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Qidirish… (vazifa, loyiha, sahifa)"
+          placeholder={t("cmdk.placeholder")}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault();
@@ -145,7 +148,7 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
           }}
         />
         <div className="cmdk-list">
-          {filtered.length === 0 && <div className="cmdk-empty">Hech narsa topilmadi</div>}
+          {filtered.length === 0 && <div className="cmdk-empty">{t("cmdk.empty")}</div>}
           {filtered.map((i, idx) => (
             <button
               key={`${i.kind}:${i.id}`}
@@ -160,9 +163,9 @@ export function CommandPalette({ tasks, habits, projects, onSelectTask, onSelect
           ))}
         </div>
         <div className="cmdk-foot">
-          <span>↑↓ tanlash</span>
-          <span>↵ ochish</span>
-          <span>Esc yopish</span>
+          <span>{t("cmdk.select")}</span>
+          <span>{t("cmdk.open")}</span>
+          <span>{t("cmdk.close")}</span>
         </div>
       </div>
     </div>
