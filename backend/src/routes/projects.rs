@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{CreateProject, Project, UpdateProject};
-use crate::AppState;
+use crate::{validate, AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -29,11 +29,8 @@ async fn create(
     user: AuthUser,
     Json(body): Json<CreateProject>,
 ) -> AppResult<Json<Project>> {
-    if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "nom bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
+    let name = validate::required_text("nom", &body.name, validate::MAX_NAME)?;
+    let color = validate::color(body.color)?;
     let row = sqlx::query_as::<_, Project>(
         "INSERT INTO projects (name, color, position, user_id)
          VALUES ($1, $2,
@@ -41,8 +38,8 @@ async fn create(
                  $3)
          RETURNING *",
     )
-    .bind(body.name.trim())
-    .bind(body.color)
+    .bind(name)
+    .bind(color)
     .bind(user.id)
     .fetch_one(&st.db)
     .await?;
@@ -55,6 +52,14 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateProject>,
 ) -> AppResult<Json<Project>> {
+    let name = match body.name {
+        Some(n) => Some(validate::required_text("nom", &n, validate::MAX_NAME)?),
+        None => None,
+    };
+    let color = match body.color {
+        Some(c) => Some(validate::color(c)?),
+        None => None,
+    };
     let row = sqlx::query_as::<_, Project>(
         "UPDATE projects SET
             name     = COALESCE($3, name),
@@ -65,8 +70,8 @@ async fn update(
     )
     .bind(id)
     .bind(user.id)
-    .bind(body.name)
-    .bind(body.color)
+    .bind(name)
+    .bind(color)
     .bind(body.position)
     .fetch_optional(&st.db)
     .await?

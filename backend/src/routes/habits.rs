@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
+use crate::{validate, AppState};
 
 #[derive(Debug, Serialize, FromRow)]
 struct HabitRow {
@@ -131,16 +131,9 @@ async fn create(
     user: AuthUser,
     Json(body): Json<CreateHabit>,
 ) -> AppResult<Json<Habit>> {
-    if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "nom bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
-    let frequency = if body.frequency == "weekly" {
-        "weekly"
-    } else {
-        "daily"
-    };
+    let name = validate::required_text("nom", &body.name, validate::MAX_NAME)?;
+    let color = validate::color(body.color)?;
+    let frequency = validate::frequency(&body.frequency);
     let row = sqlx::query_as::<_, HabitRow>(
         "INSERT INTO habits
             (name, color, frequency, target_per_week, start_date, duration_days, end_date, position, user_id)
@@ -150,8 +143,8 @@ async fn create(
          RETURNING id, name, color, frequency, target_per_week, start_date,
                    duration_days, end_date, position, created_at",
     )
-    .bind(body.name.trim())
-    .bind(body.color)
+    .bind(name)
+    .bind(color)
     .bind(frequency)
     .bind(body.target_per_week.clamp(1, 7))
     .bind(body.start_date)
@@ -172,6 +165,16 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateHabit>,
 ) -> AppResult<Json<HabitRow>> {
+    let name = match body.name {
+        Some(n) => Some(validate::required_text("nom", &n, validate::MAX_NAME)?),
+        None => None,
+    };
+    let color = match body.color {
+        Some(c) => Some(validate::color(c)?),
+        None => None,
+    };
+    // frequency berilsa 'daily'/'weekly' ga normallashtiriladi (create bilan izchil).
+    let frequency = body.frequency.map(|f| validate::frequency(&f));
     let row = sqlx::query_as::<_, HabitRow>(
         "UPDATE habits SET
             name            = COALESCE($3, name),
@@ -187,9 +190,9 @@ async fn update(
     )
     .bind(id)
     .bind(user.id)
-    .bind(body.name)
-    .bind(body.color)
-    .bind(body.frequency)
+    .bind(name)
+    .bind(color)
+    .bind(frequency)
     .bind(body.target_per_week)
     .bind(body.position)
     .bind(body.duration_days.is_some())
@@ -225,6 +228,8 @@ async fn toggle(
     Path(id): Path<Uuid>,
     Json(body): Json<ToggleBody>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Faqat bugungi (±1 kun) belgiga ruxsat — streak soxtalashtirishning oldini oladi.
+    validate::toggle_day(body.day)?;
     // Egalikni tekshirish
     let owns: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM habits WHERE id = $1 AND user_id = $2")

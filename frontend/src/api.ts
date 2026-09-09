@@ -24,10 +24,14 @@ export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };
 
-// Bir vaqtda faqat bitta refresh so'rovi ketishini ta'minlaydi.
+// Bir vaqtda faqat bitta refresh so'rovi ketishini ta'minlaydi (shu tab ichida).
 let refreshing: Promise<boolean> | null = null;
 
-async function doRefresh(): Promise<boolean> {
+// Refresh tokenni yangilaydi. `prevToken` — muvaffaqiyatsiz so'rov ishlatgan access token;
+// agar boshqa tab allaqachon yangilagan bo'lsa (token o'zgargan), qayta so'ramaymiz.
+async function refreshOnce(prevToken: string | null): Promise<boolean> {
+  // Boshqa tab allaqachon yangilagan bo'lsa — refresh tokenni sarflamaymiz.
+  if (prevToken && tokenStore.get() && tokenStore.get() !== prevToken) return true;
   const refresh = tokenStore.getRefresh();
   if (!refresh) return false;
   try {
@@ -36,7 +40,10 @@ async function doRefresh(): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      // So'rov o'tmadi — ehtimol boshqa tab bu tokenni allaqachon aylantirgan.
+      return !!(prevToken && tokenStore.get() && tokenStore.get() !== prevToken);
+    }
     const data = (await res.json()) as { token: string; refresh_token: string };
     tokenStore.setTokens(data.token, data.refresh_token);
     return true;
@@ -45,9 +52,19 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
-function ensureRefresh(): Promise<boolean> {
+// Tablar orasida ham serializatsiya: Web Locks mavjud bo'lsa bitta tab bir vaqtda
+// yangilaydi, qolganlari kutib turib yangi tokenni oladi (spurious logout'ning oldini oladi).
+async function doRefresh(prevToken: string | null): Promise<boolean> {
+  const nav = navigator as Navigator & { locks?: LockManager };
+  if (nav.locks?.request) {
+    return nav.locks.request("challanger-refresh", () => refreshOnce(prevToken));
+  }
+  return refreshOnce(prevToken);
+}
+
+function ensureRefresh(prevToken: string | null): Promise<boolean> {
   if (!refreshing) {
-    refreshing = doRefresh().finally(() => {
+    refreshing = doRefresh(prevToken).finally(() => {
       refreshing = null;
     });
   }
@@ -66,7 +83,7 @@ async function req<T>(path: string, options?: RequestInit, retry = false): Promi
   if (res.status === 401) {
     // Access token muddati o'tgan bo'lsa — refresh token bilan bir marta yangilaymiz.
     if (!retry && path !== "/auth/refresh" && tokenStore.getRefresh()) {
-      const ok = await ensureRefresh();
+      const ok = await ensureRefresh(token);
       if (ok) return req<T>(path, options, true);
     }
     onUnauthorized?.();
@@ -175,7 +192,8 @@ export const api = {
   completeTask: (id: string) =>
     req<Task>(`/tasks/${id}/complete`, { method: "POST" }),
   deleteTask: (id: string) =>
-    req<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE" }),
+    // keepalive — sahifa yopilayotganda ham so'rov yuborilib ulguradi.
+    req<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE", keepalive: true }),
 
   // --- Kichik qadamlar (subtasks) ---
   listSubtasks: () => req<Subtask[]>("/subtasks"),

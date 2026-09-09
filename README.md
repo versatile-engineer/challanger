@@ -105,6 +105,8 @@ Ishlab chiqarishda:
 
 Fayllar: `Dockerfile` (3 bosqichli: frontend → backend → runtime), `docker-compose.yml`, `.dockerignore`.
 
+📄 To'liq deploy qo'llanmasi (muhit o'zgaruvchilari, HTTPS, zaxira, yangilash): [`docs/deploy.md`](docs/deploy.md).
+
 ## Telegram bot (ixtiyoriy)
 
 Bot vazifa eslatmalarini Telegram'ga xabar sifatida yuboradi. Sozlash uch qadam:

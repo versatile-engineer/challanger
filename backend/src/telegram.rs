@@ -194,37 +194,45 @@ impl TelegramBot {
         let Some(text) = msg.text else { return };
         let text = text.trim();
 
-        if let Some(rest) = text.strip_prefix("/start") {
-            let code = rest.trim();
-            if code.is_empty() {
+        // Birinchi so'z — buyruq; guruhlarda Telegram "/start@BotName" ko'rinishida
+        // yuborishi mumkin, shuning uchun "@..." qo'shimchasini olib tashlaymiz.
+        let mut parts = text.splitn(2, char::is_whitespace);
+        let cmd_raw = parts.next().unwrap_or("");
+        let arg = parts.next().unwrap_or("").trim();
+        let cmd = cmd_raw.split('@').next().unwrap_or(cmd_raw);
+
+        match cmd {
+            "/start" => {
+                if arg.is_empty() {
+                    let _ = self
+                        .send_message(
+                            chat_id,
+                            "Salom! 👋\nChallanger hisobingizni ulash uchun ilovada \
+                             <b>Sozlamalar → Telegram</b> bo'limini oching va havolani bosing.",
+                        )
+                        .await;
+                } else {
+                    self.link_account(chat_id, arg).await;
+                }
+            }
+            "/today" => self.send_today(chat_id, true).await,
+            "/help" => {
                 let _ = self
                     .send_message(
                         chat_id,
-                        "Salom! 👋\nChallanger hisobingizni ulash uchun ilovada \
-                         <b>Sozlamalar → Telegram</b> bo'limini oching va havolani bosing.",
+                        "Buyruqlar:\n/today — bugungi vazifalar\n/help — yordam\n\n\
+                         ➕ Oddiy matn yozsangiz — yangi vazifa qo'shiladi (bugungi kunga).\n\
+                         Vazifa eslatmalari belgilangan vaqtida avtomatik keladi.",
                     )
                     .await;
-            } else {
-                self.link_account(chat_id, code).await;
             }
-        } else if text.starts_with("/today") {
-            self.send_today(chat_id).await;
-        } else if text.starts_with("/help") {
-            let _ = self
-                .send_message(
-                    chat_id,
-                    "Buyruqlar:\n/today — bugungi vazifalar\n/help — yordam\n\n\
-                     ➕ Oddiy matn yozsangiz — yangi vazifa qo'shiladi (bugungi kunga).\n\
-                     Vazifa eslatmalari belgilangan vaqtida avtomatik keladi.",
-                )
-                .await;
-        } else if text.starts_with('/') {
-            let _ = self
-                .send_message(chat_id, "Noma'lum buyruq. /help ni ko'ring.")
-                .await;
-        } else {
+            _ if cmd.starts_with('/') => {
+                let _ = self
+                    .send_message(chat_id, "Noma'lum buyruq. /help ni ko'ring.")
+                    .await;
+            }
             // Buyruq bo'lmagan matn — yangi vazifa sifatida qo'shamiz.
-            self.add_task_from_text(chat_id, text).await;
+            _ => self.add_task_from_text(chat_id, text).await,
         }
     }
 
@@ -240,7 +248,12 @@ impl TelegramBot {
                 .await;
             return;
         };
-        let title = text.trim();
+        // Uzunlikni cheklaymiz (backend chegarasi bilan izchil — 500 belgi).
+        let title: String = text
+            .trim()
+            .chars()
+            .take(crate::validate::MAX_TITLE)
+            .collect();
         if title.is_empty() {
             return;
         }
@@ -249,12 +262,12 @@ impl TelegramBot {
              VALUES ($1, $2, date_trunc('day', now()) + interval '23 hours 59 minutes',
                      COALESCE((SELECT MAX(position) + 1 FROM tasks WHERE user_id = $2), 0))",
         )
-        .bind(title)
+        .bind(title.as_str())
         .bind(uid)
         .execute(&self.db)
         .await;
         let reply = match res {
-            Ok(_) => format!("➕ Qo'shildi: <b>{}</b>", html_escape(title)),
+            Ok(_) => format!("➕ Qo'shildi: <b>{}</b>", html_escape(&title)),
             Err(_) => "❌ Vazifa qo'shilmadi.".to_string(),
         };
         let _ = self.send_message(chat_id, &reply).await;
@@ -409,16 +422,20 @@ impl TelegramBot {
     }
 
     /// `/today` — chatga bog'langan foydalanuvchining bugungi vazifalari.
-    async fn send_today(&self, chat_id: i64) {
+    /// `notify_empty` — vazifa bo'lmasa ham xabar yuborilsinmi (digest'da false —
+    /// bo'sh ro'yxat uchun spam yubormaslik uchun).
+    async fn send_today(&self, chat_id: i64, notify_empty: bool) {
         let uid = self.user_for_chat(chat_id).await;
 
         let Some(uid) = uid else {
-            let _ = self
-                .send_message(
-                    chat_id,
-                    "Avval hisobingizni ilovadan ulang (Sozlamalar → Telegram).",
-                )
-                .await;
+            if notify_empty {
+                let _ = self
+                    .send_message(
+                        chat_id,
+                        "Avval hisobingizni ilovadan ulang (Sozlamalar → Telegram).",
+                    )
+                    .await;
+            }
             return;
         };
 
@@ -433,7 +450,9 @@ impl TelegramBot {
         .unwrap_or_default();
 
         if rows.is_empty() {
-            let _ = self.send_message(chat_id, "Bugunga vazifa yo'q 🎉").await;
+            if notify_empty {
+                let _ = self.send_message(chat_id, "Bugunga vazifa yo'q 🎉").await;
+            }
             return;
         }
 
@@ -485,7 +504,8 @@ impl TelegramBot {
                     .bind(uid)
                     .execute(&self.db)
                     .await;
-            self.send_today(chat_id).await;
+            // Bugun vazifa bo'lmasa xulosa yubormaymiz (bo'sh ro'yxat spam bo'lmasin).
+            self.send_today(chat_id, false).await;
         }
         Ok(())
     }

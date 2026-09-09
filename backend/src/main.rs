@@ -3,6 +3,7 @@ mod error;
 mod models;
 mod routes;
 mod telegram;
+mod validate;
 
 use std::sync::Arc;
 
@@ -48,8 +49,29 @@ async fn main() -> anyhow::Result<()> {
     // Migratsiyalarni ishga tushirish
     sqlx::migrate!("./migrations").run(&db).await?;
 
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "dev-secret-o'zgartiring-productionda".into());
+    // JWT maxfiy kaliti — MAJBURIY. O'rnatilmasa ochiq kodli fallback bilan
+    // ishga tushirish auth bypass'ga olib keladi, shuning uchun release'da panic.
+    let jwt_secret = match std::env::var("JWT_SECRET") {
+        Ok(s) if s.trim().len() >= 16 => s,
+        Ok(_) => {
+            if cfg!(debug_assertions) {
+                tracing::warn!("JWT_SECRET juda qisqa — dev fallback ishlatilyapti");
+                "dev-secret-o'zgartiring-productionda".into()
+            } else {
+                panic!("JWT_SECRET kamida 16 ta belgidan iborat bo'lishi kerak");
+            }
+        }
+        Err(_) => {
+            if cfg!(debug_assertions) {
+                tracing::warn!(
+                    "JWT_SECRET o'rnatilmagan — dev fallback ishlatilyapti (PRODUCTIONDA XATO)"
+                );
+                "dev-secret-o'zgartiring-productionda".into()
+            } else {
+                panic!("JWT_SECRET o'rnatilishi shart (production)");
+            }
+        }
+    };
 
     // Telegram bot (ixtiyoriy) — TELEGRAM_BOT_TOKEN berilganda yoqiladi.
     let telegram = match TelegramBot::from_env(db.clone()).await {
@@ -72,11 +94,29 @@ async fn main() -> anyhow::Result<()> {
         telegram,
     };
 
-    // Dev uchun CORS ochiq (Vite frontend boshqa portda ishlaydi)
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // CORS: CORS_ALLOWED_ORIGINS (vergul bilan) berilsa — faqat o'shalar; aks holda
+    // barcha originlarga ochiq (dev qulayligi uchun). Prodda ro'yxat berish tavsiya etiladi.
+    let cors = match std::env::var("CORS_ALLOWED_ORIGINS") {
+        Ok(v) if !v.trim().is_empty() => {
+            let origins: Vec<axum::http::HeaderValue> =
+                v.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+            CorsLayer::new()
+                .allow_origin(origins)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        _ => {
+            if !cfg!(debug_assertions) {
+                tracing::warn!(
+                    "CORS_ALLOWED_ORIGINS o'rnatilmagan — barcha originlarga ochiq (prodda cheklang)"
+                );
+            }
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    };
 
     // Auth endpoint'lariga rate limiting — brute-force himoyasi.
     // IP kaliti X-Forwarded-For / X-Real-IP orqali (reverse-proxy ortida ham).
@@ -93,6 +133,17 @@ async fn main() -> anyhow::Result<()> {
         config: governor_conf,
     });
 
+    // Umumiy rate limit — barcha API endpointlari uchun (abuse/spam himoyasi).
+    // Auth route'lar ustiga yana strictroq limit ham qo'shiladi.
+    let general_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(5)
+            .burst_size(120)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("umumiy governor konfiguratsiyasi"),
+    );
+
     let api = Router::new()
         .route("/health", get(|| async { "ok" }))
         .merge(auth_routes)
@@ -103,7 +154,10 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::pomodoro::router())
         .merge(routes::groups::router())
         .merge(routes::subtasks::router())
-        .merge(routes::telegram::router());
+        .merge(routes::telegram::router())
+        .layer(GovernorLayer {
+            config: general_conf,
+        });
 
     // Qurilgan frontend'ni (Vite `dist`) shu serverdan beramiz.
     // SPA bo'lgani uchun topilmagan yo'llar `index.html`ga yo'naltiriladi.

@@ -110,9 +110,17 @@ async fn feed(State(st): State<AppState>, Path(file): Path<String>) -> AppResult
 }
 
 fn build_ics(tasks: &[FeedTask]) -> String {
-    let mut s = String::from(
-        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Challanger//Tasks//UZ\r\nCALSCALE:GREGORIAN\r\nX-WR-CALNAME:Challanger\r\nMETHOD:PUBLISH\r\n",
-    );
+    let mut s = String::new();
+    for line in [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Challanger//Tasks//UZ",
+        "CALSCALE:GREGORIAN",
+        "X-WR-CALNAME:Challanger",
+        "METHOD:PUBLISH",
+    ] {
+        push_folded(&mut s, line);
+    }
     for t in tasks {
         let Some(due) = t.due_date else { continue };
         let dt = due.format("%Y%m%dT%H%M%SZ").to_string();
@@ -120,21 +128,21 @@ fn build_ics(tasks: &[FeedTask]) -> String {
         let prefix = if t.completed { "✅ " } else { "" };
         let summary = ics_escape(&format!("{prefix}{}", t.title));
 
-        s.push_str("BEGIN:VEVENT\r\n");
-        s.push_str(&format!("UID:{}@challanger\r\n", t.id));
-        s.push_str(&format!("DTSTAMP:{stamp}\r\n"));
-        s.push_str(&format!("DTSTART:{dt}\r\n"));
+        push_folded(&mut s, "BEGIN:VEVENT");
+        push_folded(&mut s, &format!("UID:{}@challanger", t.id));
+        push_folded(&mut s, &format!("DTSTAMP:{stamp}"));
+        push_folded(&mut s, &format!("DTSTART:{dt}"));
         // 30 daqiqalik standart davomiylik
-        s.push_str("DURATION:PT30M\r\n");
-        s.push_str(&format!("SUMMARY:{summary}\r\n"));
+        push_folded(&mut s, "DURATION:PT30M");
+        push_folded(&mut s, &format!("SUMMARY:{summary}"));
         if !t.notes.trim().is_empty() {
-            s.push_str(&format!("DESCRIPTION:{}\r\n", ics_escape(&t.notes)));
+            push_folded(&mut s, &format!("DESCRIPTION:{}", ics_escape(&t.notes)));
         }
         if let Some(rrule) = rrule_for(t.recurrence.as_deref()) {
-            s.push_str(&format!("RRULE:{rrule}\r\n"));
+            push_folded(&mut s, &format!("RRULE:{rrule}"));
         }
         if t.completed {
-            s.push_str("STATUS:CONFIRMED\r\n");
+            push_folded(&mut s, "STATUS:CONFIRMED");
         }
         // Prioritet: iCal 1 (yuqori) .. 9 (past); bizda 3 (yuqori) .. 0
         let ical_priority = match t.priority {
@@ -144,12 +152,29 @@ fn build_ics(tasks: &[FeedTask]) -> String {
             _ => 0,
         };
         if ical_priority > 0 {
-            s.push_str(&format!("PRIORITY:{ical_priority}\r\n"));
+            push_folded(&mut s, &format!("PRIORITY:{ical_priority}"));
         }
-        s.push_str("END:VEVENT\r\n");
+        push_folded(&mut s, "END:VEVENT");
     }
-    s.push_str("END:VCALENDAR\r\n");
+    push_folded(&mut s, "END:VCALENDAR");
     s
+}
+
+/// Bitta mantiqiy satrni RFC 5545 bo'yicha ~75 oktetga foldlaydi (davomi bo'sh joy bilan)
+/// va CRLF qo'shadi. Ko'p baytli belgilar bo'linmaydi (char chegarasida foldlanadi).
+fn push_folded(out: &mut String, line: &str) {
+    const LIMIT: usize = 73; // 75 oktetdan kam — zaxira bilan
+    let mut octets = 0usize;
+    for ch in line.chars() {
+        let len = ch.len_utf8();
+        if octets + len > LIMIT {
+            out.push_str("\r\n ");
+            octets = 1; // davomiy satr boshidagi bo'sh joy oktetni egallaydi
+        }
+        out.push(ch);
+        octets += len;
+    }
+    out.push_str("\r\n");
 }
 
 fn rrule_for(recurrence: Option<&str>) -> Option<String> {

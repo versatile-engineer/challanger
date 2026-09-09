@@ -14,6 +14,7 @@ use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::validate;
 use crate::AppState;
 
 // ---------- Modellar ----------
@@ -95,12 +96,12 @@ pub struct ChangePassword {
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     sub: String, // user id
-    exp: usize,  // muddati (unix seconds)
+    exp: u64,    // muddati (unix seconds) — 32-bit platformada ham 2038'dan keyin ishlaydi
 }
 
 /// Qisqa muddatli kirish (access) tokeni — 1 kun.
 fn make_token(user_id: Uuid, secret: &str) -> AppResult<String> {
-    let exp = (Utc::now() + chrono::Duration::days(1)).timestamp() as usize;
+    let exp = (Utc::now() + chrono::Duration::days(1)).timestamp() as u64;
     let claims = Claims {
         sub: user_id.to_string(),
         exp,
@@ -136,6 +137,10 @@ async fn issue_refresh(db: &PgPool, user_id: Uuid) -> AppResult<String> {
         .bind(expires)
         .execute(db)
         .await?;
+    // Muddati o'tgan tokenlarni tozalab turamiz (jadval o'smasligi uchun).
+    let _ = sqlx::query("DELETE FROM refresh_tokens WHERE expires_at < now()")
+        .execute(db)
+        .await;
     Ok(token)
 }
 
@@ -175,6 +180,15 @@ fn verify_password(password: &str, hash: &str) -> bool {
             .is_ok(),
         Err(_) => false,
     }
+}
+
+/// Login'da email enumeratsiyasini oldini olish uchun doimiy (dummy) hash.
+/// Foydalanuvchi topilmaganda ham shu bilan tekshiruv qilinadi — javob vaqti bir xil bo'ladi.
+fn dummy_hash() -> &'static str {
+    use std::sync::OnceLock;
+    static H: OnceLock<String> = OnceLock::new();
+    // hash_password faqat OOM'da xato beradi — amalda hech qachon.
+    H.get_or_init(|| hash_password("dummy-password-for-timing").unwrap_or_default())
 }
 
 // ---------- Extractor: himoyalangan route'lar uchun ----------
@@ -274,11 +288,7 @@ async fn signup(
     if !email.contains('@') {
         return Err(AppError::BadRequest("email noto'g'ri".into()));
     }
-    if body.password.len() < 6 {
-        return Err(AppError::BadRequest(
-            "parol kamida 6 ta belgidan iborat bo'lsin".into(),
-        ));
-    }
+    validate::password(&body.password)?;
 
     let hash = hash_password(&body.password)?;
 
@@ -327,7 +337,12 @@ async fn login(
 
     let user = match user {
         Some(u) if verify_password(&body.password, &u.password_hash) => u,
-        _ => return Err(AppError::BadRequest("email yoki parol noto'g'ri".into())),
+        Some(_) => return Err(AppError::BadRequest("email yoki parol noto'g'ri".into())),
+        None => {
+            // Foydalanuvchi topilmasa ham bir xil vaqt sarflaymiz (email enumeratsiyasiga qarshi).
+            let _ = verify_password(&body.password, dummy_hash());
+            return Err(AppError::BadRequest("email yoki parol noto'g'ri".into()));
+        }
     };
 
     let token = make_token(user.id, &st.jwt_secret)?;
@@ -404,11 +419,7 @@ async fn change_password(
     user: AuthUser,
     Json(body): Json<ChangePassword>,
 ) -> AppResult<Json<serde_json::Value>> {
-    if body.new_password.len() < 6 {
-        return Err(AppError::BadRequest(
-            "yangi parol kamida 6 ta belgidan iborat bo'lsin".into(),
-        ));
-    }
+    validate::password(&body.new_password)?;
     let u = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
         .bind(user.id)
         .fetch_optional(&st.db)
@@ -423,6 +434,11 @@ async fn change_password(
     sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
         .bind(user.id)
         .bind(hash)
+        .execute(&st.db)
+        .await?;
+    // Parol o'zgargach barcha refresh tokenlarni bekor qilamiz (eski sessiyalar tugaydi).
+    sqlx::query("DELETE FROM refresh_tokens WHERE user_id = $1")
+        .bind(user.id)
         .execute(&st.db)
         .await?;
     Ok(Json(serde_json::json!({ "ok": true })))

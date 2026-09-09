@@ -42,6 +42,8 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
   // Undo (o'chirishni 5 soniya kechiktirish)
   const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kutilayotgan o'chirish id'si — unmount/sahifa yopilishida yakunlash uchun (state emas, ref).
+  const pendingDeleteId = useRef<string | null>(null);
 
   // Dastlabki yuklash
   useEffect(() => {
@@ -308,9 +310,11 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
     if (selectedId === id) setSelectedId(null);
     setPendingDelete(task);
+    pendingDeleteId.current = id;
     deleteTimer.current = setTimeout(() => {
       api.deleteTask(id).catch((e) => setError(String(e.message ?? e)));
       setPendingDelete(null);
+      pendingDeleteId.current = null;
       deleteTimer.current = null;
     }, 5000);
   };
@@ -321,9 +325,9 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
       clearTimeout(deleteTimer.current);
       deleteTimer.current = null;
     }
-    if (pendingDelete) {
-      const id = pendingDelete.id;
-      api.deleteTask(id).catch((e) => setError(String(e.message ?? e)));
+    if (pendingDeleteId.current) {
+      api.deleteTask(pendingDeleteId.current).catch((e) => setError(String(e.message ?? e)));
+      pendingDeleteId.current = null;
       setPendingDelete(null);
     }
   };
@@ -336,8 +340,30 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     if (pendingDelete) {
       upsertTask(pendingDelete);
       setPendingDelete(null);
+      pendingDeleteId.current = null;
     }
   };
+
+  // Komponent yopilганda yoki sahifa yangilanganda kutilayotgan o'chirishni yakunlaymiz —
+  // aks holda 5 soniya tugamasidan chiqib ketilsa, o'chirish yo'qolib, vazifa qayta paydo bo'ladi.
+  useEffect(() => {
+    const flushNow = () => {
+      if (deleteTimer.current) {
+        clearTimeout(deleteTimer.current);
+        deleteTimer.current = null;
+      }
+      if (pendingDeleteId.current) {
+        // keepalive so'rovi sahifa yopilsa ham yetib boradi.
+        api.deleteTask(pendingDeleteId.current).catch(() => {});
+        pendingDeleteId.current = null;
+      }
+    };
+    window.addEventListener("beforeunload", flushNow);
+    return () => {
+      window.removeEventListener("beforeunload", flushNow);
+      flushNow(); // unmount (masalan logout / sahifa almashishi)
+    };
+  }, []);
 
   // Ctrl/Cmd+Z bilan oxirgi o'chirishni qaytarish
   useEffect(() => {
@@ -365,12 +391,13 @@ export default function Workspace({ user, onLogout, onUserUpdate }: Props) {
     const newIds = [...ids];
     const [moved] = newIds.splice(from, 1);
     newIds.splice(to, 0, moved);
-    // Pozitsiyalarni yangilaymiz (optimistik) va serverga saqlaymiz.
+    // Faqat ko'rinayotgan vazifalarning mavjud position "slot"larini yangi tartibda
+    // qayta taqsimlaymiz (backend bilan bir xil) — yashirin vazifalar bilan to'qnashmaydi.
+    const slots = visible.map((t) => t.position).sort((a, b) => a - b);
+    const posById = new Map<string, number>();
+    newIds.forEach((id, i) => posById.set(id, slots[i]));
     setTasks((prev) =>
-      prev.map((t) => {
-        const idx = newIds.indexOf(t.id);
-        return idx >= 0 ? { ...t, position: idx } : t;
-      })
+      prev.map((t) => (posById.has(t.id) ? { ...t, position: posById.get(t.id)! } : t))
     );
     setDragId(null);
     setDragOverId(null);

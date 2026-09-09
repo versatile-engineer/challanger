@@ -7,7 +7,27 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{CreateTask, ReorderTasks, Task, TaskQuery, UpdateTask};
-use crate::AppState;
+use crate::{validate, AppState};
+
+/// Berilgan `project_id` (agar bor bo'lsa) shu foydalanuvchiga tegishliligini tekshiradi.
+async fn ensure_project_owned(
+    st: &AppState,
+    user: Uuid,
+    project_id: Option<Uuid>,
+) -> AppResult<()> {
+    if let Some(pid) = project_id {
+        let owned: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM projects WHERE id = $1 AND user_id = $2")
+                .bind(pid)
+                .bind(user)
+                .fetch_optional(&st.db)
+                .await?;
+        if owned.is_none() {
+            return Err(AppError::BadRequest("loyiha topilmadi".into()));
+        }
+    }
+    Ok(())
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -27,12 +47,38 @@ async fn reorder(
     if body.ids.len() > 1000 {
         return Err(AppError::BadRequest("juda ko'p element".into()));
     }
+
+    // Muhim: 0,1,2… deb qayta raqamlamaymiz — aks holda filtrlangan (search/tag/loyiha/
+    // completed) ko'rinishda faqat ko'rinadigan qism qayta raqamlanib, yashirin vazifalar
+    // bilan `position` qiymatlari to'qnashadi. O'rniga faqat shu vazifalarning mavjud
+    // position "slot"larini yangi tartibda qayta taqsimlaymiz — yashirinlarga tegmaymiz.
     let mut tx = st.db.begin().await?;
-    for (i, id) in body.ids.iter().enumerate() {
+
+    // Shu foydalanuvchiga tegishli, so'ralgan id'larning joriy pozitsiyalari.
+    let existing: Vec<(Uuid, f64)> =
+        sqlx::query_as("SELECT id, position FROM tasks WHERE user_id = $1 AND id = ANY($2)")
+            .bind(user.id)
+            .bind(&body.ids)
+            .fetch_all(&mut *tx)
+            .await?;
+
+    let owned: std::collections::HashSet<Uuid> = existing.iter().map(|(id, _)| *id).collect();
+    let mut slots: Vec<f64> = existing.iter().map(|(_, p)| *p).collect();
+    slots.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    // So'ralgan tartibda, faqat egalik qilinadigan id'lar.
+    let ordered: Vec<Uuid> = body
+        .ids
+        .iter()
+        .copied()
+        .filter(|id| owned.contains(id))
+        .collect();
+
+    for (id, pos) in ordered.iter().zip(slots.iter()) {
         sqlx::query(
             "UPDATE tasks SET position = $1, updated_at = now() WHERE id = $2 AND user_id = $3",
         )
-        .bind(i as f64)
+        .bind(*pos)
         .bind(id)
         .bind(user.id)
         .execute(&mut *tx)
@@ -67,7 +113,13 @@ async fn list(
     }
     if let Some(term) = q.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         // Sarlavha yoki izohda qidiruv (harf registriga sezgir emas).
-        let pattern = format!("%{}%", term.replace('%', "\\%").replace('_', "\\_"));
+        // Escape belgisining o'zi (\) birinchi bo'lib ekranlanadi, so'ng % va _.
+        let pattern = format!(
+            "%{}%",
+            term.replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+        );
         qb.push(" AND (title ILIKE ")
             .push_bind(pattern.clone())
             .push(" OR notes ILIKE ")
@@ -119,11 +171,11 @@ async fn create(
     user: AuthUser,
     Json(body): Json<CreateTask>,
 ) -> AppResult<Json<Task>> {
-    if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "sarlavha bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
+    let title = validate::required_text("sarlavha", &body.title, validate::MAX_TITLE)?;
+    let notes = validate::optional_text("izoh", &body.notes, validate::MAX_NOTES)?;
+    let recurrence = validate::recurrence(body.recurrence)?;
+    ensure_project_owned(&st, user.id, body.project_id).await?;
+
     let row = sqlx::query_as::<_, Task>(
         "INSERT INTO tasks (title, project_id, notes, due_date, priority, recurrence, reminder_at, position, user_id, tags)
          VALUES ($1, $2, $3, $4, $5, $6, $7,
@@ -131,12 +183,12 @@ async fn create(
                  $8, $9)
          RETURNING *",
     )
-    .bind(body.title.trim())
+    .bind(title)
     .bind(body.project_id)
-    .bind(body.notes)
+    .bind(notes)
     .bind(body.due_date)
     .bind(body.priority.clamp(0, 3))
-    .bind(body.recurrence)
+    .bind(recurrence)
     .bind(body.reminder_at)
     .bind(user.id)
     .bind(normalize_tags(body.tags))
@@ -151,6 +203,29 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateTask>,
 ) -> AppResult<Json<Task>> {
+    // Berilgan maydonlarni tekshiramiz/normallashtiramiz.
+    let title = match body.title {
+        Some(t) => Some(validate::required_text(
+            "sarlavha",
+            &t,
+            validate::MAX_TITLE,
+        )?),
+        None => None,
+    };
+    let notes = match body.notes {
+        Some(n) => Some(validate::optional_text("izoh", &n, validate::MAX_NOTES)?),
+        None => None,
+    };
+    // recurrence: Some(Some(r)) — o'rnatish (tekshiriladi), Some(None) — tozalash, None — tegmaslik.
+    let recurrence: Option<Option<String>> = match body.recurrence {
+        Some(inner) => Some(validate::recurrence(inner)?),
+        None => None,
+    };
+    // project_id o'rnatilayotgan bo'lsa — egalikni tekshiramiz.
+    if let Some(Some(pid)) = body.project_id {
+        ensure_project_owned(&st, user.id, Some(pid)).await?;
+    }
+
     // COALESCE + double_option: `Some(None)` => NULLga o'rnatish, `None` => tegmaslik.
     let row = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET
@@ -177,16 +252,16 @@ async fn update(
     )
     .bind(id)
     .bind(user.id)
-    .bind(body.title)
-    .bind(body.notes)
+    .bind(title)
+    .bind(notes)
     .bind(body.completed)
     .bind(body.project_id.is_some())
     .bind(body.project_id.flatten())
     .bind(body.due_date.is_some())
     .bind(body.due_date.flatten())
     .bind(body.priority.map(|p| p.clamp(0, 3)))
-    .bind(body.recurrence.is_some())
-    .bind(body.recurrence.flatten())
+    .bind(recurrence.is_some())
+    .bind(recurrence.flatten())
     .bind(body.reminder_at.is_some())
     .bind(body.reminder_at.flatten())
     .bind(body.position)

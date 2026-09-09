@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
+use crate::{validate, AppState};
 
 // ---------- Modellar ----------
 
@@ -228,16 +228,12 @@ async fn create_group(
     user: AuthUser,
     Json(body): Json<CreateGroup>,
 ) -> AppResult<Json<GroupSummary>> {
-    if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "guruh nomi bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
+    let name = validate::required_text("guruh nomi", &body.name, validate::MAX_NAME)?;
     let mut tx = st.db.begin().await?;
     let group_id: Uuid = sqlx::query_scalar(
         "INSERT INTO groups (name, owner_id, invite_code) VALUES ($1, $2, $3) RETURNING id",
     )
-    .bind(body.name.trim())
+    .bind(name)
     .bind(user.id)
     .bind(invite_code())
     .fetch_one(&mut *tx)
@@ -509,24 +505,17 @@ async fn create_group_habit(
     Json(body): Json<CreateGroupHabit>,
 ) -> AppResult<Json<GroupHabitRow>> {
     require_member(&st, id, user.id).await?;
-    if body.name.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "nom bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
-    let freq = if body.frequency == "weekly" {
-        "weekly"
-    } else {
-        "daily"
-    };
+    let name = validate::required_text("nom", &body.name, validate::MAX_NAME)?;
+    let color = validate::color(body.color)?;
+    let freq = validate::frequency(&body.frequency);
     let row = sqlx::query_as::<_, GroupHabitRow>(
         "INSERT INTO group_habits (group_id, name, color, frequency, target_per_week)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, color, frequency, target_per_week, created_at",
     )
     .bind(id)
-    .bind(body.name.trim())
-    .bind(body.color)
+    .bind(name)
+    .bind(color)
     .bind(freq)
     .bind(body.target_per_week.clamp(1, 7))
     .fetch_one(&st.db)
@@ -604,17 +593,13 @@ async fn create_group_task(
     Json(body): Json<CreateGroupTask>,
 ) -> AppResult<Json<GroupTaskInfo>> {
     require_member(&st, id, user.id).await?;
-    if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "vazifa bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
+    let title = validate::required_text("vazifa", &body.title, validate::MAX_TITLE)?;
     let row = sqlx::query_as::<_, GroupTaskInfo>(
         "INSERT INTO group_tasks (group_id, title, created_by) VALUES ($1, $2, $3)
          RETURNING id, title, done, created_by, done_by, created_at",
     )
     .bind(id)
-    .bind(body.title.trim())
+    .bind(title)
     .bind(user.id)
     .fetch_one(&st.db)
     .await?;
@@ -699,6 +684,8 @@ async fn toggle_group_habit(
     Path(hid): Path<Uuid>,
     Json(body): Json<ToggleBody>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Faqat bugungi (±1 kun) belgiga ruxsat — leaderboard soxtalashtirishning oldini oladi.
+    validate::toggle_day(body.day)?;
     // Odat qaysi guruhga tegishli va foydalanuvchi a'zomi?
     let group_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT gh.group_id FROM group_habits gh

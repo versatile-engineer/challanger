@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
-use crate::AppState;
+use crate::{validate, AppState};
 
 #[derive(Debug, Serialize, FromRow)]
 struct Subtask {
@@ -71,18 +71,14 @@ async fn create(
     Json(body): Json<CreateSubtask>,
 ) -> AppResult<Json<Subtask>> {
     assert_task_owner(&st, task_id, user.id).await?;
-    if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "qadam bo'sh bo'lishi mumkin emas".into(),
-        ));
-    }
+    let title = validate::required_text("qadam", &body.title, validate::MAX_TITLE)?;
     let row = sqlx::query_as::<_, Subtask>(
         "INSERT INTO subtasks (task_id, title, position)
          VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM subtasks WHERE task_id = $1), 0))
          RETURNING *",
     )
     .bind(task_id)
-    .bind(body.title.trim())
+    .bind(title)
     .fetch_one(&st.db)
     .await?;
     Ok(Json(row))
@@ -94,6 +90,10 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateSubtask>,
 ) -> AppResult<Json<Subtask>> {
+    let title = match body.title {
+        Some(t) => Some(validate::required_text("qadam", &t, validate::MAX_TITLE)?),
+        None => None,
+    };
     let row = sqlx::query_as::<_, Subtask>(
         "UPDATE subtasks s SET
             title    = COALESCE($3, title),
@@ -105,7 +105,7 @@ async fn update(
     )
     .bind(id)
     .bind(user.id)
-    .bind(body.title)
+    .bind(title)
     .bind(body.done)
     .bind(body.position)
     .fetch_optional(&st.db)

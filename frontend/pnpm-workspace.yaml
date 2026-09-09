@@ -1,4 +1,8 @@
 packages:
   - .
+# esbuild o'z platform binarini o'rnatish uchun build skriptini ishlatadi.
+# pnpm 10+ build skriptlarni standart holda bloklaydi — shuning uchun ruxsat beramiz.
 onlyBuiltDependencies:
   - esbuild
+allowBuilds:
+  esbuild: true
