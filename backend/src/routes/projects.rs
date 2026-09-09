@@ -11,7 +11,7 @@ use crate::{validate, AppState};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/projects", get(list).post(create))
-        .route("/projects/:id", patch(update).delete(delete))
+        .route("/projects/{id}", patch(update).delete(delete))
 }
 
 async fn list(State(st): State<AppState>, user: AuthUser) -> AppResult<Json<Vec<Project>>> {

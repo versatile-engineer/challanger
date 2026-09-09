@@ -33,8 +33,8 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/tasks", get(list).post(create))
         .route("/tasks/reorder", post(reorder))
-        .route("/tasks/:id", get(get_one).patch(update).delete(delete))
-        .route("/tasks/:id/complete", post(complete))
+        .route("/tasks/{id}", get(get_one).patch(update).delete(delete))
+        .route("/tasks/{id}/complete", post(complete))
 }
 
 /// Vazifalarni drag-and-drop tartibiga ko'ra qayta raqamlaydi.

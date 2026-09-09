@@ -1,6 +1,5 @@
-use argon2::password_hash::{
-    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-};
+use argon2::password_hash::phc::PasswordHash;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
 use axum::extract::{FromRef, FromRequestParts, State};
 use axum::http::request::Parts;
@@ -147,9 +146,9 @@ async fn issue_refresh(db: &PgPool, user_id: Uuid) -> AppResult<String> {
 // ---------- Parol ----------
 
 fn hash_password(password: &str) -> AppResult<String> {
-    let salt = SaltString::generate(&mut OsRng);
+    // password-hash 0.6 da tuz (salt) getrandom orqali avtomatik generatsiya qilinadi.
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|h| h.to_string())
         .map_err(|_| AppError::BadRequest("parolni hashlab bo'lmadi".into()))
 }
@@ -198,7 +197,6 @@ pub struct AuthUser {
     pub id: Uuid,
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     AppState: FromRef<S>,

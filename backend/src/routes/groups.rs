@@ -140,23 +140,23 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/groups", get(list_groups).post(create_group))
         .route("/groups/join", post(join_group))
-        .route("/groups/:id", get(get_group).delete(delete_group))
-        .route("/groups/:id/members", post(add_member))
+        .route("/groups/{id}", get(get_group).delete(delete_group))
+        .route("/groups/{id}/members", post(add_member))
         .route(
-            "/groups/:id/members/:uid",
+            "/groups/{id}/members/{uid}",
             axum::routing::delete(remove_member),
         )
-        .route("/groups/:id/leave", post(leave_group))
-        .route("/groups/:id/habits", post(create_group_habit))
+        .route("/groups/{id}/leave", post(leave_group))
+        .route("/groups/{id}/habits", post(create_group_habit))
         .route(
-            "/groups/:id/habits/:hid",
+            "/groups/{id}/habits/{hid}",
             axum::routing::delete(delete_group_habit),
         )
-        .route("/group-habits/:id/toggle", post(toggle_group_habit))
-        .route("/group-habits/:id/react", post(react_group_habit))
-        .route("/groups/:id/tasks", post(create_group_task))
-        .route("/group-tasks/:id/toggle", post(toggle_group_task))
-        .route("/group-tasks/:id", axum::routing::delete(delete_group_task))
+        .route("/group-habits/{id}/toggle", post(toggle_group_habit))
+        .route("/group-habits/{id}/react", post(react_group_habit))
+        .route("/groups/{id}/tasks", post(create_group_task))
+        .route("/group-tasks/{id}/toggle", post(toggle_group_task))
+        .route("/group-tasks/{id}", axum::routing::delete(delete_group_task))
 }
 
 // ---------- Yordamchilar ----------

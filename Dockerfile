@@ -9,8 +9,11 @@ WORKDIR /app/frontend
 # pnpm'ni corepack orqali yoqamiz (lockfile bilan mos versiyani qadaymiz)
 RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
-# Avval faqat manifestlarni ko'chirib, paketlarni keshlaymiz
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# Avval faqat manifestlarni ko'chirib, paketlarni keshlaymiz.
+# pnpm-workspace.yaml ham kerak: unda onlyBuiltDependencies/allowBuilds va
+# minimumReleaseAgeExclude siyosati bor — busiz supply-chain tekshiruvi yangi
+# paketlarni (react@19.3.0 va h.k.) rad etadi.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 # pnpm 10+ postinstall skriptlarni bloklaydi; esbuild binari optional-dep orqali
 # keladi, lekin ignored-builds xatosi buildни to'xtatmasin uchun ruxsat beramiz
 RUN pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true

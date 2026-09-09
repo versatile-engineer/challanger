@@ -129,9 +129,7 @@ async fn main() -> anyhow::Result<()> {
             .finish()
             .expect("governor konfiguratsiyasi"),
     );
-    let auth_routes = auth::router().layer(GovernorLayer {
-        config: governor_conf,
-    });
+    let auth_routes = auth::router().layer(GovernorLayer::new(governor_conf));
 
     // Umumiy rate limit — barcha API endpointlari uchun (abuse/spam himoyasi).
     // Auth route'lar ustiga yana strictroq limit ham qo'shiladi.
@@ -155,9 +153,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::groups::router())
         .merge(routes::subtasks::router())
         .merge(routes::telegram::router())
-        .layer(GovernorLayer {
-            config: general_conf,
-        });
+        .layer(GovernorLayer::new(general_conf));
 
     // Qurilgan frontend'ni (Vite `dist`) shu serverdan beramiz.
     // SPA bo'lgani uchun topilmagan yo'llar `index.html`ga yo'naltiriladi.

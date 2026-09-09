@@ -19,7 +19,7 @@ use crate::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/calendar/token", post(enable).delete(regenerate))
-        .route("/calendar/:file", get(feed))
+        .route("/calendar/{file}", get(feed))
 }
 
 #[derive(sqlx::FromRow)]

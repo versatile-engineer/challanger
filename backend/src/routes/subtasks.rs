@@ -35,8 +35,8 @@ struct UpdateSubtask {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/subtasks", get(list_all))
-        .route("/tasks/:id/subtasks", post(create))
-        .route("/subtasks/:id", patch(update).delete(delete))
+        .route("/tasks/{id}/subtasks", post(create))
+        .route("/subtasks/{id}", patch(update).delete(delete))
 }
 
 /// Foydalanuvchining barcha vazifalaridagi kichik qadamlar.

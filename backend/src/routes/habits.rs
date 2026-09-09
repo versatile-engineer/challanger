@@ -86,8 +86,8 @@ fn default_frequency() -> String {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/habits", get(list).post(create))
-        .route("/habits/:id", axum::routing::patch(update).delete(delete))
-        .route("/habits/:id/toggle", post(toggle))
+        .route("/habits/{id}", axum::routing::patch(update).delete(delete))
+        .route("/habits/{id}/toggle", post(toggle))
 }
 
 async fn list(State(st): State<AppState>, user: AuthUser) -> AppResult<Json<Vec<Habit>>> {
