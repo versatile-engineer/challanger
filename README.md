@@ -15,14 +15,15 @@ vazifa boshqaruvchi.
 - 📁 Loyihalar / ro'yxatlar va teglar
 - 🔁 Takrorlanuvchi vazifalar (har kuni / **ish kunlari** / hafta / **2 haftada** / oy / yil) — "bajarilganda" avtomatik keyingi muddatga suriladi
 - 📆 **Kalendar obunasi (iCal)** — muddatli vazifalarni Google / Apple / Outlook kalendariga obuna qilish (`webcal` feed)
-- ⏰ Eslatmalar — brauzer bildirishnomalari **va Telegram bot** orqali
+- ⏰ Eslatmalar — uchta kanal: brauzer bildirishnomalari, **Web Push** (ilova yopiq bo'lsa ham) **va Telegram bot**; bitta dispatcher barcha kanallarga yuboradi
+- 🔔 **Web Push (VAPID)** — ilova yopiq bo'lsa ham keladigan push; to'liq bepul (Google/Mozilla/Apple push serverlari), Sozlamalardan yoqiladi
 - 🤖 **Telegram bot** — hisobni ulab, eslatmalarni Telegram'da olish; **inline "✅ Bajarildi" tugmasi**, **oddiy matn yozib vazifa qo'shish**, **ertalabki kunlik xulosa** (`/today`, `/help` buyruqlari)
 - 📅 Aqlli ko'rinishlar: **Bugun**, **Kelgusi**, **Barchasi**
 - 📆 **Kalendar** — vazifalar oylik gridda, kunga bosib vazifa qo'shish
 - 🧭 **Eisenhower matritsasi** — 4 kvadrant, drag-and-drop bilan
 - 🔥 **Odatlar (habit tracker)** — chastota (har kuni / haftada N marta) va davomiylik (kun soni / sanagacha / doimiy) tanlanadi; kunlik belgilash, streak, progress %
 - 🧩 **Kichik qadamlar (subtasklar)** — har vazifa ichida checklist va progress
-- 👥 **Jamoa (groupwork)** — guruh yaratish/qo'shilish, jamoaviy odat va vazifalar, reaksiyalar, leaderboard
+- 👥 **Jamoa (groupwork)** — guruh yaratish/qo'shilish (taklif kodi), **rollar** (ega / admin / a'zo, egalikni uzatish), jamoaviy odatlar (streak, 90-kunlik heatmap, haftalik maqsad, reaksiyalar), umumiy vazifalar (**mas'ul + muddat + eslatma**), **guruh chati**, **challenge (musobaqa)** g'olib bilan, **turtki (nudge)**, davrli leaderboard (hafta/oy/hammasi) va yutuq nishonlari, guruh profili (emoji + tavsif)
 - 📊 **Statistika** — vazifa/odat grafiklari (donut, bar, ustunlar)
 - 🍅 **Pomodoro** — 25/5 taymer, avtomatik tanaffuslar; sessiyalar **serverga yoziladi** va statistikada ko'rinadi (bugungi son, jami fokus vaqti, 30 kunlik grafik)
 - ⏳ **Countdown** — muhim sanalargacha sanoq (localStorage)
@@ -33,9 +34,9 @@ vazifa boshqaruvchi.
 
 | Qatlam    | Texnologiya |
 |-----------|-------------|
-| Backend   | Rust, Axum, SQLx, Tokio, reqwest (Telegram) |
+| Backend   | Rust, Axum, SQLx, Tokio, reqwest (Telegram), web-push (VAPID) |
 | Baza      | PostgreSQL 16 (loyiha ichida, docker kerak emas) |
-| Frontend  | React 18, Vite, TypeScript |
+| Frontend  | React 19, Vite, TypeScript |
 | Muhit     | Nix flake + direnv |
 
 ## Boshlash
@@ -91,7 +92,7 @@ Butun stek (PostgreSQL + backend + frontend) bitta `docker compose` bilan ko'tar
 Frontend qurilgach, backend uni bir xil manzildan (`/`) beradi — alohida nginx kerak emas.
 
 ```bash
-cp .env.docker.example .env      # JWT_SECRET va (ixtiyoriy) TELEGRAM_BOT_TOKEN ni to'ldiring
+cp .env.docker.example .env      # JWT_SECRET va (ixtiyoriy) TELEGRAM_BOT_TOKEN / VAPID_PRIVATE_KEY
 docker compose up -d --build
 ```
 
@@ -122,10 +123,29 @@ So'ng ilovada **Sozlamalar → Telegram eslatmalari → "Telegram'ni ulash"** �
 
 Ishlash tamoyili:
 - **Long polling** (`getUpdates`) — public HTTPS URL kerak emas, self-hosted serverda ham ishlaydi.
-- Fon vazifasi har 30 soniyada `reminder_at` yetgan, bajarilmagan vazifalarni topib xabar yuboradi (takror yubormaydi).
+- Yagona **eslatma dispatcheri** (`reminders.rs`) har 30 soniyada `reminder_at` yetgan, bajarilmagan vazifalarni topib **Telegram va Web Push**ga birga yuboradi, so'ng takror yubormaslik uchun belgilaydi.
 - Token berilmasa bot jim o'chiq turadi — ilova avvalgidek ishlaydi.
 
 Bot buyruqlari: `/start <kod>` (ulash), `/today` (bugungi vazifalar), `/help`.
+
+## Web Push (ixtiyoriy)
+
+Ilova **yopiq bo'lsa ham** keladigan brauzer bildirishnomasi. To'liq **bepul** — VAPID standarti, uchinchi tomon xizmati kerak emas.
+
+1. **VAPID kalitini yarating** (bir marta):
+   ```bash
+   scripts/genvapid.sh          # VAPID_PRIVATE_KEY=... ni oling
+   ```
+2. **`.env` / `backend/.env` ga qo'shing**:
+   ```bash
+   VAPID_PRIVATE_KEY=<qiymat>
+   VAPID_SUBJECT=mailto:siz@example.com
+   ```
+3. Backendni qayta ishga tushiring — logda `🔔 Web Push yoqildi (VAPID)` chiqadi.
+
+So'ng ilovada **Sozlamalar → Bildirishnomalar → "Push'ni yoqish"**. Server ochiq kalitni maxfiydan
+avtomatik hosil qiladi; obuna `push_subscriptions` jadvalida saqlanadi. **Diqqat:** Web Push faqat
+**HTTPS** (yoki dev'da `localhost`) da ishlaydi. `VAPID_PRIVATE_KEY` bo'sh bo'lsa push o'chiq turadi.
 
 ## API
 
@@ -164,18 +184,43 @@ Barcha yo'llar `/api` ostida. Vazifa/loyiha yo'llari `Authorization: Bearer <tok
 | GET    | `/telegram/status`       | Bot sozlanganmi (`configured`) va hisob ulanganmi (`connected`) |
 | POST   | `/telegram/link`         | Bir martalik bog'lash kodi + deep-link qaytaradi |
 | POST   | `/telegram/unlink`       | Hisobni Telegram'dan uzadi |
+| GET    | `/push/vapid`            | Ochiq VAPID kaliti (`applicationServerKey`) — push yoqilgan bo'lsa |
+| POST   | `/push/subscribe`        | Brauzer push obunasini saqlash (`endpoint`, `keys`) |
+| POST   | `/push/unsubscribe`      | Push obunasini bekor qilish (`endpoint`) |
 
-> Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa (`/groups*`) yo'llari ham mavjud — kod: `backend/src/routes/`.
+> Eslatma: subtask (`/tasks/:id/subtasks`, `/subtasks/:id`) va jamoa yo'llari — guruh CRUD,
+> a'zolar/rollar (`/groups/:id/members/:uid/role`), chat (`/groups/:id/messages`), challenge
+> (`/groups/:id/challenges`), turtki (`/groups/:id/nudge`) va h.k. — ham mavjud.
+> To'liq ro'yxat kodda: `backend/src/routes/` va `backend/src/push.rs`.
 
 ## Sinov (testlar)
 
 ```bash
-cd backend && cargo test         # backend unit-testlar
-cd frontend && pnpm test         # frontend (Vitest) testlar
+# Backend: unit-testlar + integratsiya testlari.
+# Integratsiya testlari (#[sqlx::test]) Postgres talab qiladi — har test uchun
+# vaqtinchalik baza yaratadi. Shuning uchun DATABASE_URL berilishi va rol CREATEDB
+# huquqiga ega bo'lishi kerak.
+cd backend
+DATABASE_URL=postgres://challanger:challanger@localhost:5433/challanger cargo test
+
+cd ../frontend && pnpm test       # frontend (Vitest) testlar
 ```
 
-CI: har push/PR'da `cargo fmt/clippy/test` va frontend `tsc/test/build` ishga tushadi
-(`.github/workflows/ci.yml`).
+Agar birinchi marta `permission denied to create database` chiqsa, rolga huquq bering:
+
+```bash
+scripts/pg.sh psql -c "ALTER ROLE challanger CREATEDB;"   # yoki postgres superuser orqali
+```
+
+Qamrov:
+- **Backend:** 22 unit + 18 integratsiya (`backend/tests/`). Integratsiya testlari haqiqiy `axum`
+  router orqali o'tadi va **avtorizatsiya/IDOR** (foydalanuvchilar orasidagi izolyatsiya, guruh
+  rollari) hamda **funksional oqimlar** (qisman yangilash, takrorlanish, validatsiya, odat toggle)
+  ni tekshiradi.
+- **Frontend:** Vitest (NLP parseri).
+
+CI: har push/PR'da backend `fmt/clippy/test` (Postgres xizmati bilan) va frontend `tsc/test/build`
+ishga tushadi (`.github/workflows/ci.yml`).
 
 ## Keyingi qadamlar (g'oyalar)
 
