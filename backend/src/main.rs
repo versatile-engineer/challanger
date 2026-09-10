@@ -1,17 +1,7 @@
-mod auth;
-mod error;
-mod models;
-mod push;
-mod reminders;
-mod routes;
-mod telegram;
-mod validate;
-
 use std::sync::Arc;
 
 use axum::Router;
 use axum::routing::get;
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
@@ -20,15 +10,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
-use crate::telegram::TelegramBot;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: PgPool,
-    pub jwt_secret: Arc<String>,
-    pub telegram: Option<Arc<TelegramBot>>,
-    pub push: Option<Arc<push::WebPush>>,
-}
+use challanger::telegram::TelegramBot;
+use challanger::{AppState, auth, push, reminders, routes};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

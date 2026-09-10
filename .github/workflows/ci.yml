@@ -9,11 +9,32 @@ jobs:
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
+    # Integratsiya testlari (#[sqlx::test]) uchun Postgres. `postgres` roli superuser —
+    # har test uchun vaqtinchalik baza yarata oladi.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # sqlx::test shu bazaga ulanib, har test uchun alohida baza yaratadi.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v5
+      - name: Tizim kutubxonalari (web-push/ece → openssl)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
       - name: Rust toolchain o'rnatish
         uses: dtolnay/rust-toolchain@stable
         with:
